@@ -8,7 +8,7 @@ export class Minimap {
   constructor(el: HTMLCanvasElement, private readonly world: World) {
     this.ctx = el.getContext('2d')!;
   }
-  update(x: number, z: number, faceX: number, faceZ: number, dt: number, towers: Tower[], shards: string[]) {
+  update(x: number, z: number, faceX: number, faceZ: number, dt: number, towers: Tower[]) {
     this.elapsed += dt;
     if (this.elapsed < 0.15) return;
     this.elapsed = 0;
@@ -25,18 +25,22 @@ export class Minimap {
       c.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
     }
     const P = (wx: number, wz: number): [number, number] => [C + (wx - x) * sc, C + (wz - z) * sc];
-    const mark = (wx: number, wz: number, color: string, done: boolean) => {
+    const mark = (wx: number, wz: number, color: string, done: boolean, expedition = false) => {
       let [px, pz] = P(wx, wz);
       const dx = px - C, dz = pz - C, d = Math.hypot(dx, dz), max = 104;
       if (d > max) { px = C + dx / d * max; pz = C + dz / d * max; }
       c.save(); c.translate(px, pz); c.rotate(Math.PI / 4);
       c.fillStyle = done ? 'rgba(200,200,220,.5)' : color; c.strokeStyle = '#1a1238'; c.lineWidth = 2;
-      c.fillRect(-7, -7, 14, 14); c.strokeRect(-7, -7, 14, 14); c.restore();
+      if (expedition) {
+        c.rotate(-Math.PI / 4);
+        c.beginPath(); c.arc(0, 0, 4.5, 0, Math.PI * 2); c.fill(); c.stroke();
+      } else { c.fillRect(-7, -7, 14, 14); c.strokeRect(-7, -7, 14, 14); }
+      c.restore();
     };
     mark(this.world.home.x, this.world.home.z, '#6fe3ff', false);
     for (const t of towers) {
       const p = t.course.platforms[0];
-      mark(p.x, p.z, t.info.color, shards.includes(t.id));
+      mark(p.x, p.z, t.info.color, t.collected, t.expedition);
     }
     const l = Math.hypot(faceX, faceZ) || 1;
     c.translate(C, C); c.rotate(Math.atan2(faceX / l, -faceZ / l));

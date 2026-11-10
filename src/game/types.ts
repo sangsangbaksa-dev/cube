@@ -1,4 +1,4 @@
-export type PlatformKind = 'static' | 'moving' | 'crumble' | 'bounce' | 'checkpoint' | 'goal';
+export type PlatformKind = 'static' | 'moving' | 'crumble' | 'bounce' | 'checkpoint' | 'goal' | 'phase' | 'ice' | 'sling' | 'switch';
 
 /** 파쿠르 발판 하나. y는 윗면 높이(월드 좌표). 상자 모양이고 축에 정렬되어 있다. */
 export interface PlatformSpec {
@@ -16,6 +16,10 @@ export interface PlatformSpec {
   orbit?: { radius: number; period: number; phase: number };
   /** bounce: 점프 속도의 몇 배로 쏘아 올리는가 */
   launch?: number;
+  launchVector?: { x: number; z: number };
+  phase?: { period: number; offset: number; on: number };
+  relay?: number;
+  requires?: number;
 }
 
 export interface CourseSpec {

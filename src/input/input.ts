@@ -27,6 +27,7 @@ export class Input {
     this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
     addEventListener('keydown', (e) => {
+      if (document.querySelector('dialog[open]')) return;
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
       if (e.repeat) return;
       this.keys.add(e.code);
@@ -73,6 +74,13 @@ export class Input {
   start() {
     this.active = true;
     if (this.lastPointerType !== 'touch' && (this.lastPointerType === 'mouse' || matchMedia('(pointer: fine)').matches)) this.requestPointerLock();
+  }
+
+  clear() {
+    this.keys.clear();
+    this.jumpQueued = this.attackQueued = this.dashQueued = false;
+    this.jumpTouch = this.diveTouch = false;
+    this.stick.x = this.stick.y = this.look.yaw = this.look.pitch = 0;
   }
 
   private requestPointerLock() {

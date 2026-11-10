@@ -1,4 +1,5 @@
-import { ROUTES, type Site } from '../world/terrain';
+import { ROUTES, STORY_ROUTE_COUNT, type Site } from '../world/terrain';
+import { makeExpedition } from './expedition-routes';
 import type { CourseSpec, PlatformKind, PlatformSpec } from './types';
 
 export interface Barrier {
@@ -9,14 +10,19 @@ export interface Barrier {
 export interface RouteCourse extends CourseSpec {
   barriers: Barrier[];
   recovery?: { minY: number; x: number; z: number; hx: number; hz: number };
+  sweeps?: { x: number; y: number; z: number; radius: number; period: number; offset: number }[];
+  lifts?: { x: number; y: number; z: number; radius: number; height: number }[];
+  rings?: { x: number; y: number; z: number; radius: number; yaw: number }[];
 }
+
+export type AddPlatform = (x: number, y: number, z: number, hx: number, hz?: number, kind?: PlatformKind,
+  options?: Pick<PlatformSpec, 'move' | 'launch' | 'orbit' | 'launchVector' | 'phase' | 'relay' | 'requires'>) => void;
 
 export function makeRoute(site: Site): RouteCourse {
   const { x, y: baseY, z } = site;
   const platforms: PlatformSpec[] = [];
   const barriers: Barrier[] = [];
-  const p = (u: number, y: number, v: number, hx: number, hz = hx, kind: PlatformKind = 'static',
-    options: Pick<PlatformSpec, 'move' | 'launch' | 'orbit'> = {}) => {
+  const p: AddPlatform = (u, y, v, hx, hz = hx, kind = 'static', options = {}) => {
     platforms.push({ x: x + u, y: baseY + y, z: z + v, hx, hz, thickness: 0.48, kind, ...options });
   };
   const wall = (u: number, v: number, hx: number, hz: number, bottom: number, top: number, kind: Barrier['kind'] = 'wall') => {
@@ -24,6 +30,7 @@ export function makeRoute(site: Site): RouteCourse {
   };
   const drift = (ax: number, ay: number, az: number, period: number, phase = 0) => ({ move: { ax, ay, az, period, phase } });
   let recovery: RouteCourse['recovery'];
+  const mechanisms = site.id > STORY_ROUTE_COUNT ? makeExpedition(site, p) : {};
 
   switch (site.id) {
     case 1: // 짧고 넓은 입문 계단
@@ -130,10 +137,11 @@ export function makeRoute(site: Site): RouteCourse {
       p(-.2, 4.2, 10.05, 1.56, 1.55, 'checkpoint');
       p(0, 4.8, -.7, 8.15, 7.55, 'goal');
       break;
-    default: throw new Error('Unknown route');
+    default:
+      if (!platforms.length) throw new Error('Unknown route');
   }
   const end = platforms[platforms.length - 1];
-  return { id: `route-${site.id}`, x, z, baseY, platforms, barriers, recovery, goal: { x: end.x, y: end.y + 1.02, z: end.z } };
+  return { id: `route-${site.id}`, x, z, baseY, platforms, barriers, recovery, ...mechanisms, goal: { x: end.x, y: end.y + 1.02, z: end.z } };
 }
 
 export const routeInfo = (site: Site) => ROUTES[site.id - 1];

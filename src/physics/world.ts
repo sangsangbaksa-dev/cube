@@ -52,6 +52,9 @@ export interface Obstacle {
   collisionTop?: number;
   /** 마법진: 밟으면 점프 속도의 몇 배로 쏘아 올린다 */
   launch?: number;
+  launchVector?: { x: number; z: number };
+  ice?: boolean;
+  disabled?: boolean;
 }
 export interface ObstacleSource {
   near(x: number, z: number): readonly Obstacle[];
@@ -74,6 +77,7 @@ export interface PhysicsInput {
   /** 입력이 없을 때 대시할 방향 (바라보는 방향) */
   faceX?: number;
   faceZ?: number;
+  updraft?: boolean;
 }
 
 /** 풀린 능력. 게임 진행에 따라 바뀐다 */
@@ -196,6 +200,8 @@ export class PhysicsWorld {
     s.x = s.px = x; s.y = s.py = y; s.z = s.pz = z;
     s.vx = s.vy = s.vz = 0;
     s.grounded = false; s.submerged = false; s.slamming = false; s.dashT = 0; s.stunT = 0;
+    s.coyote = s.buffer = s.dashCd = 0;
+    s.airDashUsed = s.noCut = false;
     s.standingOn = null;
   }
 
@@ -211,7 +217,7 @@ export class PhysicsWorld {
     this.sampledObstacle = null;
     if (this.obstacles && !underWater) {
       for (const o of this.obstacles.near(x, z)) {
-        if (o.top === Infinity || o.top <= g) continue;
+        if (o.disabled || o.top === Infinity || o.top <= g) continue;
         // 발이 윗면보다 한참 아래면(밑으로 지나가는 중) 지지면이 아니다
         if (feet < o.top - STEP_UP) continue;
         if (insideObstacle(o, x, z, HALF * 0.6)) {
@@ -231,7 +237,7 @@ export class PhysicsWorld {
     const ab = this.abilities;
 
     // 0) 움직이는 발판 위에 서 있으면 발판과 함께 움직인다
-    const carrier = s.grounded ? s.standingOn : null;
+    const carrier = s.grounded && !s.standingOn?.disabled ? s.standingOn : null;
     if (carrier && (carrier.dx || carrier.dy || carrier.dz)) {
       s.x += carrier.dx ?? 0;
       s.y += carrier.dy ?? 0;
@@ -285,7 +291,8 @@ export class PhysicsWorld {
       const tvx = input.moveX * scale * speed;
       const tvz = input.moveZ * scale * speed;
       // 넉백으로 최고 속도보다 빠를 때는 공중에서 천천히 줄어든다
-      const accel = (s.grounded ? (hasInput ? GROUND_ACCEL : GROUND_FRICTION) : AIR_ACCEL) * control;
+      const groundAccel = carrier?.ice ? (hasInput ? 26 : 6) : (hasInput ? GROUND_ACCEL : GROUND_FRICTION);
+      const accel = (s.grounded ? groundAccel : AIR_ACCEL) * control;
       const dvx = tvx - s.vx;
       const dvz = tvz - s.vz;
       const dlen = Math.hypot(dvx, dvz);
@@ -367,6 +374,10 @@ export class PhysicsWorld {
     }
 
     // 4) 중력 (상승 중 버튼을 떼면 더 강하게 → 가변 점프 높이)
+    if (input.updraft && !s.grounded && !s.slamming && !s.inWater) {
+      s.vy = Math.max(s.vy, 7.1);
+      s.noCut = true;
+    }
     const vyOld = s.vy;
     if (s.slamming) {
       s.vy = -SLAM_SPEED;
@@ -388,6 +399,7 @@ export class PhysicsWorld {
     if (this.obstacles) {
       const feetPrev = s.py - HALF;
       for (const o of this.obstacles.near(s.x, s.z)) {
+        if (o.disabled) continue;
         const bottom = o.collisionBottom ?? -Infinity;
         if (feetPrev >= (o.collisionTop ?? o.top) - 0.1) continue;
         if (s.y + HALF <= bottom) continue;
@@ -431,8 +443,13 @@ export class PhysicsWorld {
     // 6.5) 마법진/튕김 발판: 위에 서 있으면 하늘로 쏘아 올린다
     if (this.obstacles && s.grounded && !s.inWater) {
       for (const o of this.obstacles.near(s.x, s.z)) {
-        if (o.launch && (o.hx !== undefined ? s.standingOn === o : insideObstacle(o, s.x, s.z, 0))) {
+        if (!o.disabled && o.launch && (o.hx !== undefined ? s.standingOn === o : insideObstacle(o, s.x, s.z, 0))) {
           s.vy = JUMP_SPEED * o.launch;
+          if (o.launchVector) {
+            s.vx = o.launchVector.x;
+            s.vz = o.launchVector.z;
+            s.stunT = .24;
+          }
           s.grounded = false;
           s.coyote = 0;
           s.buffer = 0;

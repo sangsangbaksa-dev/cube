@@ -51,6 +51,41 @@
     .topright { position: fixed; right: var(--right); top: var(--top); display: flex; gap: 6px; z-index: 5; }
     .chip { padding: 7px 11px; font-size: 12px; border-radius: 10px; }
     .chip.on { color: var(--gold); border-color: rgba(255, 211, 107, .5); }
+    .expedition-toggle { position: fixed; left: var(--left); bottom: var(--bottom); z-index: 5; color: #f4dec5; }
+    body:not(.started) .expedition-toggle { visibility: hidden; }
+    .touch .expedition-toggle { bottom: calc(var(--bottom) + 147px); }
+    .trial { padding: 4px 9px; color: #e7c9a6; font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+    .expedition-dialog {
+      box-sizing: border-box; width: min(590px, calc(100vw - 28px)); max-height: min(90dvh, 740px);
+      padding: 0; color: #f5e9db; background: #252333; border: 1px solid #595166;
+      border-radius: 10px; box-shadow: 0 26px 100px #100d20a8; touch-action: pan-y; user-select: none;
+    }
+    .expedition-dialog::backdrop { background: #15131fc2; }
+    .expedition-head, .expedition-foot { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 21px 25px; }
+    .expedition-head { align-items: flex-start; }
+    .expedition-head h2 { margin: 4px 0 0; font-family: var(--display); font-size: 39px; font-weight: 400; }
+    .expedition-kicker { margin: 0; font-size: 11px; color: #e5bd91; font-weight: 700; letter-spacing: .13em; }
+    .expedition-close { background: none; color: #c9bfce; border: 1px solid #60576a; border-radius: 5px; padding: 6px 10px; }
+    .expedition-list { padding: 0 25px; }
+    .expedition-row {
+      width: 100%; display: grid; grid-template-columns: 36px minmax(0, 1fr) max-content;
+      align-items: center; gap: 12px; text-align: left; padding: 10px 5px;
+      background: none; border: 0; border-top: 1px solid #4a4355;
+    }
+    .expedition-row:hover, .expedition-row:focus-visible { background: #3a3347; }
+    .expedition-number { font-family: var(--display); font-size: 23px; color: var(--trail-color); }
+    .expedition-row strong, .expedition-row small { display: block; }
+    .expedition-row strong { font-size: 14px; }
+    .expedition-row small { margin-top: 3px; color: #c8bfcd; font-size: 11px; line-height: 1.4; }
+    .expedition-record { color: #c6b6ca; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .expedition-row.recorded .expedition-record { color: #ebcb9b; font-weight: 700; }
+    .expedition-foot { color: #d2c5d6; font-size: 12px; border-top: 1px solid #4a4355; margin-top: 8px; }
+    @media (max-width: 500px) {
+      .expedition-head, .expedition-foot { padding: 14px 15px; }
+      .expedition-list { padding-inline: 15px; }
+      .expedition-row { grid-template-columns: 28px minmax(0, 1fr) max-content; gap: 8px; }
+    }
 
     #minimap { position: fixed; right: var(--right); top: calc(var(--top) + 42px); width: clamp(92px, 17vw, 132px); height: clamp(92px, 17vw, 132px); border-radius: 16px; z-index: 4; pointer-events: none; }
 
@@ -135,7 +170,20 @@
   <div class="center">
     <div class="place" id="place">등대 언덕</div>
     <div class="objective panel" id="objective" hidden></div>
+    <div class="trial panel" id="trial" hidden></div>
   </div>
+  <button class="expedition-toggle chip panel" id="expeditionBtn" type="button" aria-keyshortcuts="P" aria-haspopup="dialog">원정 지도</button>
+  <dialog class="expedition-dialog" id="expeditionDialog" aria-labelledby="expeditionTitle">
+    <header class="expedition-head">
+      <div><p class="expedition-kicker">별빛 큐브 · 타임 트라이얼</p><h2 id="expeditionTitle">원정 지도</h2></div>
+      <button class="expedition-close" id="expeditionClose" type="button" autofocus>닫기</button>
+    </header>
+    <div class="expedition-list" id="expeditionList"></div>
+    <footer class="expedition-foot">
+      <span id="expeditionTally"></span>
+      <button class="expedition-close" id="expeditionHome" type="button">등대로 돌아가기</button>
+    </footer>
+  </dialog>
   <div class="topright">
     <button class="chip panel" id="homeBtn" type="button">돌아가기 (R)</button>
     <button class="chip panel" id="timeBtn" type="button">밤 앞당기기 (T)</button>
@@ -164,7 +212,7 @@
         <li class="tc"><b>점프 · 찍기 · 대시</b><span>오른쪽 버튼</span></li>
         <li class="tc"><b>화면 드래그</b><span>시점</span></li>
       </ul>
-      <p class="tip">돌길과 색이 다른 빛기둥이 코스 입구를 알려 줘요.</p>
+      <p class="tip">돌길과 빛기둥을 따라가거나, 원정 지도(P)에서 새 코스로 떠나세요.</p>
       <button class="btn" id="startBtn" type="button">떠나기</button>
       <button class="link" id="resetBtn" type="button" hidden>처음부터 다시 하기</button>
     </div>

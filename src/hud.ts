@@ -21,6 +21,11 @@ export const hud = {
   isTouch: touch,
   setPlace(name: string) { $('place').textContent = name; },
   setObjective(text: string) { const o = $('objective'); o.textContent = text; o.hidden = !text; },
+  setTrial(text: string) {
+    const el = $('trial');
+    if (el.textContent !== text) el.textContent = text;
+    el.hidden = !text;
+  },
   setBoss(active: boolean, hp: number, hearts: number) {
     const status = active ? `${hp}/${hearts}` : '';
     if (status === bossStatus) return;

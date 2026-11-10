@@ -10,6 +10,7 @@ import { surfaceNormal } from './physics/terrain';
 import { ObstacleGrid } from './world/grid';
 import { Tower } from './game/towers';
 import { Guardian } from './game/guardian';
+import { expeditionMenu, formatRun } from './game/expedition-menu';
 import { clearSave, loadSave, SHARD_GOAL, writeSave } from './game/progress';
 import { FALL_Y, World } from './world/terrain';
 import { buildWorld, Sky } from './world/render';
@@ -81,7 +82,8 @@ grid.add({ x: home.x, z: home.z, r: 2.2, top: Infinity });
 const towers = world.towers.map((s) => new Tower(world, s));
 for (const t of towers) scene.add(t.group);
 const cave = towers[3];
-const final = towers[towers.length - 1];
+const final = towers[SHARD_GOAL - 1];
+const expeditions = towers.filter(t => t.expedition);
 const guardian = new Guardian(final.course.platforms.at(-1)!);
 scene.add(guardian.group);
 
@@ -106,7 +108,7 @@ physics.abilities.airJumps = 0; // 더블점프 없음
 physics.abilities.dash = true;
 const dustTotal = deco.dust.length;
 function applyProgress() {
-  for (const t of towers) t.setCollected(save.shards.includes(t.id));
+  for (const t of towers) t.setCollected(t.expedition ? save.records[t.id] !== undefined : save.shards.includes(t.id));
   for (const d of deco.dust) d.mesh.visible = !save.dust.includes(d.id);
   hud.setShards(save.shards.length, SHARD_GOAL);
   hud.setGems(save.dust.length, dustTotal);
@@ -124,7 +126,7 @@ hud.setMuted(audio.muted);
 hud.onMute(() => hud.setMuted(audio.toggleMuted()));
 let fast = false;
 hud.onFast(() => { fast = !fast; hud.setFast(fast); });
-hud.onReset(save.shards.length > 0 || save.dust.length > 0, () => {
+hud.onReset(save.shards.length > 0 || save.dust.length > 0 || Object.keys(save.records).length > 0, () => {
   clearSave();
   location.reload();
 });
@@ -154,6 +156,28 @@ let clock = 0.09; // 0~1 하루 (0.5가 한밤)
 let stepDist = 0, placeT = 0, objT = 0, emaDt = 1 / 60, prTimer = -5, retCd = 0;
 let lastSafe = { x: physics.state.x, y: physics.state.y, z: physics.state.z };
 const DAY = 300;
+let run: {
+  tower: Tower;
+  arrived: boolean;
+  running: boolean;
+  elapsed: number;
+  checkpoint: { x: number; y: number; z: number };
+} | null = null;
+const menu = expeditionMenu(expeditions, {
+  canOpen: () => started && document.getElementById('victory')!.classList.contains('hidden'),
+  records: () => save.records,
+  onOpen: () => { input.clear(); document.exitPointerLock?.(); },
+  onClose: () => input.clear(),
+  onChoose: (tower) => {
+    if (guardian.active) guardian.reset();
+    beginExpedition(tower, true);
+  },
+  onHome: () => {
+    if (guardian.active) guardian.reset();
+    endExpedition();
+    respawn(spawnPoint());
+  },
+});
 
 function nightAmount() { return 0.5 - 0.5 * Math.cos(clock * Math.PI * 2); }
 
@@ -176,17 +200,94 @@ function routeRespawn(t: Tower, preferStart = false) {
   }
 }
 
+function beginExpedition(tower: Tower, travel: boolean) {
+  endExpedition();
+  const [start, next] = tower.course.platforms;
+  const checkpoint = { x: start.x, y: start.y + .57, z: start.z };
+  run = { tower, arrived: !travel, running: false, elapsed: 0, checkpoint };
+  if (travel) {
+    respawn(checkpoint);
+    camYaw = Math.atan2(start.x - next.x, start.z - next.z);
+    camPitch = .22;
+  }
+  hud.setTrial('출발 발판을 벗어나면 기록 시작');
+  objT = placeT = 0;
+}
+
+function endExpedition() {
+  run?.tower.resetExpedition();
+  run = null;
+  hud.setTrial('');
+}
+
+function retryExpedition() {
+  if (!run) return;
+  run.tower.mechanisms?.reset();
+  respawn(run.checkpoint);
+}
+
+function tickExpedition(s: typeof physics.state) {
+  if (!run) {
+    const site = world.siteAt(s.x, s.z, 4);
+    const tower = site?.id ? towers[site.id - 1] : undefined;
+    if (tower?.expedition && s.standingOn === tower.plats[0].ob) beginExpedition(tower, false);
+  }
+  if (!run) return;
+  const { tower } = run;
+  if (Math.hypot(s.x - tower.island.x, s.z - tower.island.z) > tower.island.r + 10) {
+    endExpedition();
+    return;
+  }
+  const onStart = s.standingOn === tower.plats[0].ob;
+  run.arrived ||= onStart;
+  if (!run.arrived) return;
+  run.running ||= !onStart;
+  if (!run.running) return;
+  run.elapsed += FIXED_DT;
+
+  const checkpoint = tower.plats.find(p => p.ob === s.standingOn && p.spec.kind === 'checkpoint')?.spec;
+  if (checkpoint && (checkpoint.x !== run.checkpoint.x || checkpoint.z !== run.checkpoint.z)) {
+    run.checkpoint = { x: checkpoint.x, y: checkpoint.y + .57, z: checkpoint.z };
+    audio.checkpoint();
+  }
+  if (tower.takeRelay(s)) audio.checkpoint();
+  if (tower.mechanisms?.recharge(s)) {
+    audio.collect(1);
+    particles.emit(s.x, s.y, s.z, 15, { color: '#ffc9f1', speed: 4, up: 2, size: .13 });
+  }
+  if (retCd <= 0 && (tower.swept(s) || (s.grounded && !s.standingOn && s.y < tower.island.y + 1.4))) retryExpedition();
+}
+
+function finishExpedition(tower: Tower) {
+  if (!run?.running || run.tower !== tower) return;
+  const time = run.elapsed;
+  const best = save.records[tower.id];
+  const improved = best === undefined || time < best;
+  if (improved) {
+    save.records[tower.id] = time;
+    writeSave(save);
+    tower.setCollected(true);
+    menu.refresh();
+  }
+  endExpedition();
+  audio.shard();
+  hud.banner(tower.info.name, improved ? `새 기록 · ${formatRun(time)}` : `완주 ${formatRun(time)} · 최고 ${formatRun(best)}`, 2300);
+  const { x, y, z } = physics.state;
+  particles.emit(x, y + .4, z, 34, { color: tower.info.color, speed: 5, up: 5, size: .14 });
+}
+
 /** R: 마지막 쉼터(없으면 등대)로 돌아간다 */
 function returnToCheckpoint() {
-  if (!started || retCd > 0) return;
-  if (guardian.active) { guardian.reset(); routeRespawn(final); }
+  if (!started || retCd > 0 || menu.dialog.open) return;
+  if (run) retryExpedition();
+  else if (guardian.active) { guardian.reset(); routeRespawn(final); }
   else respawn(save.checkpoint ?? spawnPoint());
 }
 addEventListener('keydown', (e) => { if (e.code === 'KeyR' && !e.repeat) returnToCheckpoint(); });
 document.getElementById('homeBtn')!.addEventListener('click', (e) => { e.stopPropagation(); returnToCheckpoint(); });
 
 function gainShard(id: string) {
-  if (save.shards.includes(id)) return;
+  if (save.shards.includes(id) || !towers.slice(0, SHARD_GOAL).some(t => t.id === id)) return;
   save.shards.push(id);
   save.checkpoint = null; // 다 올랐으니 R은 등대로
   const n = save.shards.length;
@@ -203,7 +304,7 @@ function placeName(s: { x: number; z: number }): string {
   if (site?.role === 'home') return '등대 언덕';
   if (site) {
     const t = towers[site.id - 1];
-    return `${t.info.name} · ${t.collected ? '완료' : `난도 ${site.id}/7`}`;
+    return `${t.info.name} · ${t.expedition ? '원정' : t.collected ? '완료' : `난도 ${site.id}/7`}`;
   }
   const h = world.height(s.x, s.z);
   const t = Math.sin(s.x * 0.011) + Math.sin(s.z * 0.013 + 1.7) + Math.sin((s.x + s.z) * 0.007);
@@ -220,20 +321,25 @@ function dirIndex(dx: number, dz: number) {
 }
 function updateObjective() {
   const s = physics.state;
+  const site = world.siteAt(s.x, s.z, 4);
+  const nearby = site?.id ? towers[site.id - 1] : undefined;
+  if (run || nearby?.expedition) {
+    const tower = run?.tower ?? nearby!;
+    hud.setObjective(run ? tower.info.hint : tower.collected ? '원정 지도(P)에서 다시 도전할 수 있어요.' : '입구 발판 위에 서면 원정을 시작해요.');
+    return;
+  }
   if (guardian.active) {
     hud.setObjective(guardian.phase === 'exposed' ? '지금! 핵 위에서 뛰어 내려찍으세요.' :
       guardian.phase === 'warn' || guardian.phase === 'pulse' ? '충격파가 오면 점프하세요.' : '파동을 피하고 핵이 드러날 때를 기다리세요.');
     return;
   }
   if (save.shards.length >= SHARD_GOAL) {
-    if (save.won) { hud.setObjective(''); return; }
+    if (save.won) { hud.setObjective('원정 지도(P)에서 새 코스에 도전하세요.'); return; }
     const d = Math.hypot(home.x - s.x, home.z - s.z);
     hud.setObjective(d < 12 ? '등대 앞에 서서 불을 밝혀요' : `등대로 돌아가기 · ${DIRS[dirIndex(home.x - s.x, home.z - s.z)]}쪽 ${Math.round(d)}m`);
     return;
   }
-  const site = world.siteAt(s.x, s.z, 4);
-  const nearby = site?.id ? towers[site.id - 1] : undefined;
-  const t = nearby && !nearby.collected ? nearby : towers.find((route) => !route.collected);
+  const t = nearby && !nearby.collected ? nearby : towers.find((route) => !route.expedition && !route.collected);
   if (!t) { hud.setObjective(''); return; }
   const p = t.course.platforms[0], dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz);
   const local = t === nearby || d < 12;
@@ -278,11 +384,11 @@ function frame(now: number) {
     prTimer = 0;
     if (emaDt > 1 / 28 && pixelRatio > 0.75) { pixelRatio = Math.max(0.75, pixelRatio - 0.25); renderer.setPixelRatio(pixelRatio); resize(); }
   }
-  const dt = rawDt;
+  const dt = menu.dialog.open ? 0 : rawDt;
   const inp = input.read();
   const { steps, alpha } = stepper.advance(dt);
   let attack = steps > 0 && input.consumeAttack(), dash = steps > 0 && input.consumeDash();
-  const alive = started;
+  const alive = started && !menu.dialog.open;
   if (!alive) {
     input.consumeJump(); attack = dash = false;
     inp.moveX = inp.moveY = 0;
@@ -306,11 +412,13 @@ function frame(now: number) {
     const pi: PhysicsInput = {
       moveX, moveZ, jumpPressed: pressed, jumpHeld: alive && input.jumpHeld, diveHeld: false,
       dashPressed: dash && k === 0, slamPressed: slamPressed && k === 0, faceX, faceZ,
+      updraft: run?.tower.mechanisms?.inUpdraft(s),
     };
     if (dash && k === 0) dash = false;
     if (slamPressed && k === 0) slamPressed = false;
     physics.step(pi);
     if (alive) {
+      tickExpedition(s);
       const event = guardian.step(FIXED_DT, s, save.shards.length >= SHARD_GOAL - 1, final.collected);
       if (event === 'retry') { routeRespawn(final); hud.banner('다시 도전', '충격파를 뛰어넘고, 핵이 드러나면 내려찍어요.', 1800); }
       if (event === 'hit') { audio.slamImpact(.55); shakeAmt = Math.max(shakeAmt, .48); cube.flash = .55; }
@@ -359,12 +467,21 @@ function frame(now: number) {
   const night = nightAmount();
   for (const t of towers) {
     const ev = t.update(time, s);
-    if (ev.checkpoint && (!save.checkpoint || Math.hypot(save.checkpoint.x - ev.checkpoint.x, save.checkpoint.y - ev.checkpoint.y, save.checkpoint.z - ev.checkpoint.z) > 0.5)) {
+    if (!t.expedition && ev.checkpoint && (!save.checkpoint || Math.hypot(save.checkpoint.x - ev.checkpoint.x, save.checkpoint.y - ev.checkpoint.y, save.checkpoint.z - ev.checkpoint.z) > 0.5)) {
       save.checkpoint = ev.checkpoint; writeSave(save);
       audio.checkpoint();
       hud.banner('쉼터', '떨어져도 R을 누르면 여기로 돌아와요', 2200);
     }
-    if (ev.shard) gainShard(ev.shard);
+    if (ev.shard && alive) {
+      if (t.expedition) finishExpedition(t);
+      else gainShard(ev.shard);
+    }
+  }
+  if (run?.running) {
+    const { tower, elapsed } = run;
+    const best = save.records[tower.id];
+    const stage = tower.relayCount ? ` · 스위치 ${tower.relayStage}/${tower.relayCount}` : '';
+    hud.setTrial(`${formatRun(elapsed)}${best === undefined ? '' : ` · 최고 ${formatRun(best)}`}${stage}`);
   }
   guardian.update(time);
   hud.setBoss(guardian.active, guardian.health, guardian.hearts);
@@ -440,7 +557,7 @@ function frame(now: number) {
   camera.lookAt(camTarget.x, camTarget.y + .8, camTarget.z);
   fog.near = 60 - night * 20; fog.far = 270 - night * 70;
   sky.update(camera, time, night, fog);
-  minimap.update(s.x, s.z, faceX, faceZ, rawDt, towers, save.shards);
+  minimap.update(s.x, s.z, faceX, faceZ, rawDt, towers);
   if (started) audio.update(rawDt, { elevation: 0.3 - night * 0.6, speed, grounded: s.grounded });
   renderer.render(scene, camera);
 }
@@ -456,4 +573,5 @@ requestAnimationFrame(frame);
   guardian: () => ({ active: guardian.active, phase: guardian.phase, health: guardian.health, hearts: guardian.hearts }),
   dust: () => deco.dust.map((d) => ({ id: d.id, x: d.x, y: d.y, z: d.z })),
   give: (id: string) => { if (towers.some((t) => t.id === id)) gainShard(id); },
+  expedition: () => run && ({ id: run.tower.id, elapsed: run.elapsed, relay: run.tower.relayStage }),
 };

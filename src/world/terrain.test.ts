@@ -3,7 +3,7 @@ import { TOWER_COUNT, World } from './terrain';
 
 describe('오픈월드 지형', () => {
   const w = new World();
-  it('집 하나와 탑 일곱 개', () => {
+  it('등대와 코스마다 광장이 하나씩 있다', () => {
     expect(w.home.role).toBe('home');
     expect(w.towers.length).toBe(TOWER_COUNT);
   });

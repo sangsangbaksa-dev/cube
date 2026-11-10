@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Obstacle } from '../physics/world';
 import { mulberry32 } from '../util/rand';
-import type { Site, World } from '../world/terrain';
+import { STORY_ROUTE_COUNT, type Site, type World } from '../world/terrain';
 import { routeInfo, type RouteCourse } from './routes';
 
 const BOX = new THREE.BoxGeometry();
@@ -39,7 +39,7 @@ export function buildLandmark(world: World, site: Site, course: RouteCourse, gro
     m.rotation.set((rnd() - .5) * .6, rnd() * 5, (rnd() - .5) * .65);
     return m;
   };
-  const band = (px: number, py: number, pz: number, r: number, tint = edge) =>
+  const band = (px: number, py: number, pz: number, r: number, tint: THREE.Material = edge) =>
     mesh(cylinder, tint, px, py, pz, r, .24, r);
   const start = course.platforms[0], sx = start.x - x, sz = start.z - z;
   // 입구의 두 짧은 표식은 먼 거리에서 보이는 빛기둥과 같은 색이다.
@@ -48,6 +48,27 @@ export function buildLandmark(world: World, site: Site, course: RouteCourse, gro
     const h = world.height(x + px, z + pz) - y;
     mesh(cylinder, dark, px, h + .67, pz, .24, 1.4, .24);
     mesh(CRYSTAL, glow, px, h + 1.44, pz, .27, .46, .27);
+  }
+  if (id > STORY_ROUTE_COUNT) {
+    const next = course.platforms[1];
+    const entrance = new THREE.Group();
+    entrance.position.set(sx, start.y - y, sz);
+    entrance.rotation.y = Math.atan2(next.x - start.x, next.z - start.z);
+    root.add(entrance);
+    for (const side of [-1, 1]) {
+      const post = new THREE.Mesh(BOX, stone);
+      post.scale.set(.43, 3.3, .64);
+      post.position.set(side * 2.25, 1.32, -.7);
+      entrance.add(post);
+      const cap = new THREE.Mesh(CRYSTAL, glow);
+      cap.scale.set(.27, .47, .27);
+      cap.position.set(side * 2.25, 3.13, -.7);
+      entrance.add(cap);
+    }
+    const lintel = new THREE.Mesh(BOX, edge);
+    lintel.scale.set(4.98, .32, .62);
+    lintel.position.set(0, 2.99, -.7);
+    entrance.add(lintel);
   }
   for (const b of course.barriers) {
     const px = b.x - x, pz = b.z - z, py = (b.bottom + b.top) * .5 - y;
@@ -71,6 +92,71 @@ export function buildLandmark(world: World, site: Site, course: RouteCourse, gro
     for (const [px, pz, h] of [[-8, -3, 3.6], [-6, -7, 2.4], [3, -7, 1.8], [8, -3, 2.7]]) {
       rock(px, .3, pz, 1.2, 1.1, 1.1);
       crystal(px, .6, pz, h);
+    }
+  }
+  if (id === 8) {
+    for (const [px, pz, h] of [[14, 1, 5.4], [5, 3, 7.2], [-2, -6, 8.4], [-11, 9, 7.1], [-17, 1, 10]]) {
+      mesh(cylinder, stone, px, h / 2 - .45, pz, .74, h, .74);
+      band(px, h - .52, pz, .81);
+      const moon = mesh(new THREE.TorusGeometry(.69, .09, 6, 24, Math.PI * 1.52), glow, px, h + .1, pz, 1, 1, 1);
+      moon.rotation.y = .32;
+      moon.rotation.z = -.42;
+    }
+  }
+  if (id === 9) {
+    for (const [px, pz, h] of [[-6.5, -12, 6.2], [3.5, -12, 4.1], [10.6, -7.1, 7.2], [14.4, 1, 5.3], [12.4, 10.1, 6.8], [2, 13.6, 3.5], [-8.9, 15.9, 5.6]]) {
+      rock(px, .4, pz, 2.4, 1.2, 2.1);
+      crystal(px, .5, pz, h * .63);
+      crystal(px + 1.1, .28, pz - .65, h * .31);
+    }
+  }
+  if (id === 10) {
+    for (const p of course.platforms.filter(p => p.launchVector)) {
+      const px = p.x - x, py = p.y - y, pz = p.z - z;
+      mesh(cylinder, shade, px, (py - .65) / 2, pz, 1, py + .45, 1);
+      for (let j = 1; j <= 3; j++) band(px, py * j / 4, pz, 1.13, j === 2 ? glow : edge);
+    }
+    for (const [px, pz] of [[-9, 5.8], [2, -9.5], [15, -.2], [17, 16.7]]) {
+      mesh(BOX, dark, px, 1.8, pz, 1.12, 4.2, 1.12).rotation.z = .17;
+      mesh(BOX, glow, px - .26, 3.45, pz, .56, .12, 1.18);
+    }
+  }
+  if (id === 11) {
+    for (const [px, pz, height] of [[14, 3, 4.5], [2, -3.4, 7], [-8.5, 9.5, 8.2], [-15, -4, 10.9], [0, -12.2, 13]]) {
+      mesh(BOX, dark, px, height * .5 - .4, pz, .68, height, 1.25);
+      mesh(BOX, edge, px, height - .39, pz, 1.1, .23, 1.7);
+      mesh(BOX, glow, px + .35, height * .58, pz, .042, height * .65, .16);
+      crystal(px, height - .28, pz, .9);
+    }
+  }
+  if (id === 12) {
+    mesh(cylinder, shade, 0, 2.5, 0, 1.46, 5.7, 1.46);
+    band(0, 5.51, 0, 1.44, glow);
+    band(0, 3.92, 0, 1.41);
+    const rim = new THREE.TorusGeometry(9.43, .07, 5, 56);
+    mesh(rim, edge, 0, .1, 0, 1, 1, 1).rotation.x = Math.PI / 2;
+    for (let j = 0; j < 12; j++) {
+      const a = j * Math.PI / 6;
+      mesh(BOX, stone, Math.cos(a) * 10.11, .17, Math.sin(a) * 10.11, .77, .35, 1.05).rotation.y = -a;
+    }
+  }
+  if (id === 13) {
+    const sail = new THREE.ConeGeometry(1.2, 3.3, 3);
+    for (const [px, pz, height] of [[-8.5, 11.7, 10.2], [.4, 6.5, 15], [11.5, 1.6, 21.5], [10.1, -10, 26], [-3.2, -18.2, 28]]) {
+      const mast = mesh(cylinder, stone, px, height / 2 - .42, pz, .48, height, .48);
+      mast.rotation.z = -.055;
+      const wing = mesh(sail, crystalMat, px + height * .027, height + .5, pz, 1.2, .86, .44);
+      wing.rotation.z = .96;
+    }
+  }
+  if (id === 14) {
+    for (const p of course.platforms.filter(p => p.kind === 'checkpoint' || p.kind === 'goal')) {
+      const h = p.y - y;
+      mesh(cylinder, shade, p.x - x, h / 2 - .62, p.z - z, .79, h + .25, .79);
+      band(p.x - x, h - 1.15, p.z - z, .85, glow);
+    }
+    for (const [px, pz, h] of [[-18, 8, 5], [-4, 17, 4.2], [9, 9, 5.4], [19, -9, 7.8], [6, -22, 11]]) {
+      crystal(px, .2, pz, h);
     }
   }
   if (id === 2) {

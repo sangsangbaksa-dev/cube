@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { HALF, PhysicsWorld } from '../physics/world';
-import { World } from '../world/terrain';
+import { STORY_ROUTE_COUNT, World } from '../world/terrain';
 import { makeRoute } from './routes';
 
 const world = new World();
 
 describe('파쿠르 코스', () => {
   it('스폰을 중심으로 가까운 입문 코스부터 먼 수호자 코스까지 이어진다', () => {
-    const routes = world.towers.map(makeRoute);
+    const routes = world.towers.slice(0, STORY_ROUTE_COUNT).map(makeRoute);
     const distances = routes.map(({ x, z }) => Math.hypot(x, z));
     expect(distances).toEqual([...distances].sort((a, b) => a - b));
     expect(new Set(routes.map((r) => r.id)).size).toBe(7);
