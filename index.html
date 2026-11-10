@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>스카이 큐브</title>
+  <title>별빛 큐브</title>
   <meta name="description" content="황혼의 부유섬에서 별의 탑을 오르고 어둠의 균열을 정화하는 파란 큐브의 모험" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -27,11 +27,6 @@
 
     /* 상단 왼쪽: 체력과 별가루 */
     .status { position: fixed; left: var(--left); top: var(--top); padding: 9px 12px; display: grid; gap: 6px; z-index: 5; }
-    .hearts { display: flex; gap: 4px; }
-    .heart { width: 22px; height: 20px; transition: transform .2s; }
-    .heart path { fill: var(--rose); stroke: #ffd0de; stroke-width: 1.4; transition: fill .2s; }
-    .heart.empty path { fill: rgba(255,255,255,.08); stroke: rgba(255, 160, 190, .5); }
-    .heart.pop { animation: pop .35s; }
     @keyframes pop { 40% { transform: scale(1.35) rotate(-8deg); } }
     .row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--dim); }
     .gem { display: inline-flex; align-items: center; gap: 5px; color: var(--cyan); font-weight: 600; }
@@ -55,20 +50,12 @@
     .reticle { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.75); box-shadow: 0 0 6px rgba(111,227,255,.8); pointer-events: none; opacity: 0; }
     .started .reticle { opacity: .8; }
 
-    .boss { position: fixed; left: 50%; bottom: calc(var(--bottom) + 8px); transform: translateX(-50%); width: min(460px, calc(100vw - 32px)); padding: 9px 14px 12px; z-index: 5; }
-    .boss .name { font-family: var(--display); font-size: 17px; margin-bottom: 6px; color: #e3c8ff; }
-    .boss .bar { height: 10px; border-radius: 6px; background: rgba(255,255,255,.1); overflow: hidden; }
-    .boss .fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--violet), var(--rose)); transition: width .25s; box-shadow: 0 0 10px var(--violet); }
-    .touch .boss { bottom: calc(var(--bottom) + 150px); }
 
     .banner { position: fixed; left: 50%; top: 24%; transform: translate(-50%, 8px); text-align: center; opacity: 0; pointer-events: none; transition: opacity .35s, transform .35s; z-index: 6; width: min(560px, calc(100vw - 32px)); }
     .banner.show { opacity: 1; transform: translate(-50%, 0); }
     .banner h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(28px, 6vw, 44px); color: var(--gold); text-shadow: 0 0 18px rgba(255, 211, 107, .55), 0 3px 0 #6b3fb0; }
     .banner p { margin: 6px 0 0; font-size: 14px; color: var(--ink); text-shadow: 0 2px 8px rgba(10, 6, 30, .9); }
 
-    .vignette { position: fixed; inset: 0; pointer-events: none; z-index: 3; opacity: 0; transition: opacity .25s; background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 60, 110, .45)); }
-    .vignette.hit { opacity: 1; transition: none; }
-    .low .vignette { animation: beat 1s infinite; }
     @keyframes beat { 0%, 100% { opacity: .15; } 50% { opacity: .55; } }
     .threat::after { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 2; box-shadow: inset 0 0 120px rgba(130, 60, 255, .35); }
 
@@ -87,17 +74,7 @@
     .btn { margin-top: 16px; padding: 12px 34px; border: 0; border-radius: 12px; font-family: var(--display); font-size: 22px; color: #10102a; background: linear-gradient(180deg, #9ff0ff, var(--cyan)); box-shadow: 0 0 22px rgba(111, 227, 255, .45), 0 4px 0 #2e8fb0; }
     .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #2e8fb0; }
     .link { display: block; margin: 10px auto 0; background: none; border: 0; color: var(--dim); font-size: 12px; text-decoration: underline; }
-    .forgebtn { position: fixed; left: 50%; bottom: calc(var(--bottom) + 70px); transform: translateX(-50%); z-index: 6; font-size: 14px; padding: 10px 18px; color: var(--gold); border-color: rgba(255, 211, 107, .55); animation: glow 1.6s infinite; }
     @keyframes glow { 50% { box-shadow: 0 0 18px rgba(255, 211, 107, .5); } }
-    .touch .forgebtn { bottom: calc(var(--bottom) + 160px); }
-    #forgeList li { align-items: center; }
-    #forgeList button { border: 0; border-radius: 8px; padding: 6px 12px; font-family: var(--display); font-size: 15px; background: var(--cyan); color: #10102a; white-space: nowrap; }
-    #forgeList button:disabled { background: rgba(255,255,255,.15); color: var(--dim); cursor: default; }
-    #forgeList button.eq { background: var(--gold); }
-    #forgeList small { display: block; color: var(--dim); font-size: 11px; margin-top: 2px; }
-    .death { background: rgba(14, 6, 30, .72); }
-    .death h2 { font-family: var(--display); font-weight: 400; font-size: 40px; margin: 0; color: #ffc3d6; text-align: center; }
-    .death p { text-align: center; color: var(--dim); }
 
     /* 터치 조작 */
     .stick { position: fixed; left: max(22px, env(safe-area-inset-left, 0px)); bottom: max(26px, env(safe-area-inset-bottom, 0px)); width: 124px; height: 124px; border-radius: 50%; background: rgba(20, 14, 50, .35); border: 1px solid rgba(160, 150, 255, .45); display: grid; place-items: center; touch-action: none; z-index: 6; }
@@ -108,64 +85,51 @@
     .divebtn { right: max(40px, env(safe-area-inset-right, 0px)); bottom: max(134px, calc(env(safe-area-inset-bottom, 0px) + 120px)); width: 62px; height: 62px; font-size: 15px; background: rgba(162, 107, 255, .6); }
     .jumpbtn:active, .atkbtn:active, .divebtn:active { filter: brightness(1.3); transform: scale(.95); }
     @media (max-width: 560px) { .center { max-width: calc(100vw - 150px); top: calc(var(--top) + 0px); } .place { font-size: 16px; } .objective { font-size: 11px; } .topright .chip { padding: 6px 8px; font-size: 11px; } }
-    @media (prefers-reduced-motion: reduce) { .low .vignette { animation: none; opacity: .3; } }
   </style>
 </head>
 <body>
   <div id="app"></div>
-  <div class="vignette" id="vignette"></div>
   <div class="reticle"></div>
 
   <div class="status panel" aria-live="polite">
-    <div class="hearts" id="hearts" aria-label="체력"></div>
-    <div class="row"><span class="gem"><i></i><span id="gems">0</span></span><span class="shards" id="shards" aria-label="별조각"></span></div>
+    <div class="row"><span class="gem" title="별가루"><i></i><span id="gems">0</span></span><span class="shards" id="shards" aria-label="별조각"></span></div>
   </div>
   <div class="center">
-    <div class="place" id="place">하늘섬</div>
+    <div class="place" id="place">등대 언덕</div>
     <div class="objective panel" id="objective" hidden></div>
   </div>
   <div class="topright">
+    <button class="chip panel" id="homeBtn" type="button">돌아가기 (R)</button>
     <button class="chip panel" id="timeBtn" type="button">밤 앞당기기 (T)</button>
     <button class="chip panel" id="muteBtn" type="button">소리 (M)</button>
   </div>
-  <canvas id="minimap" width="240" height="240" aria-label="지도: 별의 탑은 금색, 어둠의 균열은 보라색" role="img"></canvas>
-  <div class="boss panel" id="boss" hidden><div class="name" id="bossName"></div><div class="bar"><div class="fill" id="bossFill"></div></div></div>
+  <canvas id="minimap" width="240" height="240" aria-label="지도: 별의 탑은 금색, 등대는 하늘색" role="img"></canvas>
   <div class="banner" id="banner"><h2 id="bannerTitle"></h2><p id="bannerSub"></p></div>
 
   <div class="overlay start" id="start">
     <div class="card panel">
-      <h1>스카이 큐브</h1>
-      <p class="pitch">황혼에 떠 있는 섬들. 별의 탑을 오르고 어둠의 균열을 정화해<br />일곱 개의 별조각으로 등대에 불을 밝혀요.</p>
+      <h1>별빛 큐브</h1>
+      <p class="pitch">끝없는 황혼의 들판. 일곱 개의 별의 탑을 오르고<br />별조각을 모아 등대에 불을 밝혀요.</p>
       <ul class="keys">
         <li class="kb"><b>WASD · 방향키</b><span>이동</span></li>
-        <li class="kb"><b>스페이스</b><span>점프 · 공중에서 한 번 더</span></li>
-        <li class="kb"><b>클릭 · J</b><span>회전 공격 · 공중에서는 내려찍기</span></li>
-        <li class="kb"><b>Shift · 오른쪽 클릭</b><span>대시 (첫 별조각 뒤)</span></li>
+        <li class="kb"><b>스페이스</b><span>점프 (누르는 만큼 높이)</span></li>
+        <li class="kb"><b>클릭 · J</b><span>공중에서 내려찍기</span></li>
+        <li class="kb"><b>Shift · 오른쪽 클릭</b><span>대시 (공중 한 번)</span></li>
         <li class="kb"><b>마우스 · Q/E</b><span>시점</span></li>
-        <li class="kb"><b>B · 1~4</b><span>등대 작업대 · 무기 바꾸기</span></li>
+        <li class="kb"><b>R</b><span>마지막 쉼터로 돌아가기</span></li>
         <li class="tc"><b>왼쪽 스틱</b><span>이동</span></li>
-        <li class="tc"><b>점프 · 공격 · 대시</b><span>오른쪽 버튼</span></li>
+        <li class="tc"><b>점프 · 찍기 · 대시</b><span>오른쪽 버튼</span></li>
         <li class="tc"><b>화면 드래그</b><span>시점</span></li>
       </ul>
-      <p class="tip">밤에는 몬스터가 늘어나요. 등대가 있는 처음 섬은 안전해요.<br />몬스터 머리를 밟아도 돼요. 가시 큐브만 빼고요.</p>
+      <p class="tip">탑에서 떨어져도 다치지 않아요. 대신 다시 올라야 해요.<br />돌기둥 계단 위의 별가루도 찾아봐요.</p>
       <button class="btn" id="startBtn" type="button">떠나기</button>
       <button class="link" id="resetBtn" type="button" hidden>처음부터 다시 하기</button>
     </div>
   </div>
-  <button class="chip panel forgebtn" id="forgeBtn" type="button" hidden>작업대 (B)</button>
-  <div class="overlay start hidden" id="forge">
-    <div class="card panel">
-      <h1 style="font-size:40px">등대 작업대</h1>
-      <p class="pitch">별가루 <b id="forgeGems" style="color:var(--cyan)">0</b> · 보스의 핵 <b id="forgeCores" style="color:#ff9ad0">0</b><br /><small style="color:var(--dim)">핵은 균열의 보스를 쓰러뜨리면 얻어요</small></p>
-      <ul class="keys" id="forgeList"></ul>
-      <button class="btn" id="forgeClose" type="button">닫기</button>
-    </div>
-  </div>
-  <div class="overlay death hidden" id="death"><div><h2>앗, 떨어졌어요</h2><p>등대의 불빛 아래에서 다시 일어나요…</p></div></div>
   <div class="overlay start hidden" id="victory">
     <div class="card panel">
       <h1>등대가 켜졌어요</h1>
-      <p class="pitch">일곱 개의 별조각이 하늘섬을 밝혀요.<br />섬들은 여전히 열려 있어요. 마음껏 돌아다녀요.</p>
+      <p class="pitch">일곱 개의 별조각이 들판을 밝혀요.<br />세상은 여전히 열려 있어요. 남은 별가루도 찾아봐요.</p>
       <button class="btn" id="victoryBtn" type="button">계속 탐험하기</button>
     </div>
   </div>

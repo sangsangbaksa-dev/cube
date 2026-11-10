@@ -104,7 +104,7 @@ export class Input {
     this.diveBtn = dive;
     const atk = document.createElement('button');
     atk.className = 'atkbtn';
-    atk.textContent = '공격';
+    atk.textContent = '찍기';
     root.append(base, jump, dive, atk);
     atk.addEventListener('pointerdown', (e) => {
       e.preventDefault();

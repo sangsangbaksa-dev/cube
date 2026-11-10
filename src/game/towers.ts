@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Obstacle, PhysicsState } from '../physics/world';
-import type { Island, World } from '../world/islands';
+import type { Site, World } from '../world/terrain';
 import { generateCourse } from './courses';
-import { createShard } from './monsterModels';
+import { createShard } from './shard';
 import type { CourseSpec, PlatformSpec } from './types';
 
 // 별의 탑: 기둥 둘레를 나선으로 오르는 파쿠르. 발판은 물리 충돌체이자 메시다.
@@ -33,7 +33,7 @@ export class Tower {
   collected = false;
   private t = 0;
 
-  constructor(world: World, readonly island: Island) {
+  constructor(world: World, readonly island: Site) {
     this.id = `tower${island.id}`;
     let course: CourseSpec | null = null;
     for (let s = 0; !course && s < 8; s++) {

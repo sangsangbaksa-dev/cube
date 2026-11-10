@@ -3,11 +3,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (touch) document.body.classList.add('touch');
 
-const HEART = '<svg class="heart" viewBox="0 0 24 22" aria-hidden="true"><path d="M12 20.5 3.3 12A5.3 5.3 0 0 1 12 4.6 5.3 5.3 0 0 1 20.7 12Z"/></svg>';
-let lastHp = -1;
 const bannerQueue: [string, string, number][] = [];
 let bannerBusy = false;
-let hitTimer = 0;
 
 function nextBanner() {
   const b = bannerQueue.shift();
@@ -23,42 +20,17 @@ export const hud = {
   isTouch: touch,
   setPlace(name: string) { $('place').textContent = name; },
   setObjective(text: string) { const o = $('objective'); o.textContent = text; o.hidden = !text; },
-  setHearts(hp: number, max: number) {
-    const el = $('hearts');
-    if (el.children.length !== max) el.innerHTML = HEART.repeat(max);
-    [...el.children].forEach((h, i) => {
-      h.classList.toggle('empty', i >= hp);
-      if (lastHp >= 0 && ((i >= hp && i < lastHp) || (i < hp && i >= lastHp))) {
-        h.classList.remove('pop'); void (h as HTMLElement).getBoundingClientRect(); h.classList.add('pop');
-      }
-    });
-    el.setAttribute('aria-label', `체력 ${hp}/${max}`);
-    lastHp = hp;
-  },
-  setGems(n: number) { $('gems').textContent = String(n); },
+  setGems(n: number, total = 0) { $('gems').textContent = total ? `${n}/${total}` : String(n); },
   setShards(n: number, total: number) {
     const el = $('shards');
     if (el.children.length !== total) el.innerHTML = '<b></b>'.repeat(total);
     [...el.children].forEach((b, i) => b.classList.toggle('on', i < n));
     el.setAttribute('aria-label', `별조각 ${n}/${total}`);
   },
-  bossBar(name: string | null, hp01: number) {
-    $('boss').hidden = !name;
-    if (name) { $('bossName').textContent = name; $('bossFill').style.width = `${Math.max(0, hp01) * 100}%`; }
-  },
-  flashDamage() {
-    const v = $('vignette');
-    v.classList.add('hit');
-    clearTimeout(hitTimer);
-    hitTimer = window.setTimeout(() => v.classList.remove('hit'), 90);
-  },
-  setLowHealth(on: boolean) { document.body.classList.toggle('low', on); },
-  setThreat(on: boolean) { document.body.classList.toggle('threat', on); },
   banner(title: string, sub = '', ms = 3000) {
     bannerQueue.push([title, sub, ms]);
     if (!bannerBusy) nextBanner();
   },
-  showDeath(on: boolean) { $('death').classList.toggle('hidden', !on); },
   showVictory(onClose: () => void) {
     $('victory').classList.remove('hidden');
     $('victoryBtn').onclick = () => { $('victory').classList.add('hidden'); onClose(); };
