@@ -1,5 +1,5 @@
 // 진행 상황: 모은 별조각, 별가루, 마지막 쉼터. localStorage에 저장한다.
-const KEY = 'cubequest.save.v2';
+const KEY = 'cubequest.save.v3';
 export const SHARD_GOAL = 7;
 
 export interface SaveData {
@@ -20,7 +20,7 @@ export function loadSave(): SaveData {
     if (!raw) return emptySave();
     const d = JSON.parse(raw) as Partial<SaveData>;
     return {
-      shards: Array.isArray(d.shards) ? d.shards.filter((s) => typeof s === 'string') : [],
+      shards: Array.isArray(d.shards) ? [...new Set(d.shards.filter((s) => typeof s === 'string' && /^route-[1-7]$/.test(s)))] : [],
       dust: Array.isArray(d.dust) ? d.dust.filter((n) => Number.isInteger(n)) : [],
       checkpoint: d.checkpoint && Number.isFinite(d.checkpoint.x) && Number.isFinite(d.checkpoint.y) && Number.isFinite(d.checkpoint.z) ? d.checkpoint : null,
       won: d.won === true,

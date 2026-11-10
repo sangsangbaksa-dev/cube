@@ -34,7 +34,10 @@ export class Minimap {
       c.fillRect(-7, -7, 14, 14); c.strokeRect(-7, -7, 14, 14); c.restore();
     };
     mark(this.world.home.x, this.world.home.z, '#6fe3ff', false);
-    for (const t of towers) mark(t.island.x, t.island.z, '#ffd36b', shards.includes(t.id));
+    for (const t of towers) {
+      const p = t.course.platforms[0];
+      mark(p.x, p.z, t.info.color, shards.includes(t.id));
+    }
     const l = Math.hypot(faceX, faceZ) || 1;
     c.translate(C, C); c.rotate(Math.atan2(faceX / l, -faceZ / l));
     c.beginPath(); c.moveTo(0, -12); c.lineTo(8, 9); c.lineTo(0, 5); c.lineTo(-8, 9); c.closePath();

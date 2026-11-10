@@ -1,7 +1,18 @@
 import type { Terrain } from '../physics/terrain';
 import { mulberry32, noise2 } from '../util/rand';
 
-// 끝없이 이어진 언덕과 능선 위에 별의 탑 일곱 개가 서 있는 오픈월드. 시드만으로 정해진다.
+export const ROUTES = [
+  { name: '초원 돌계단', color: '#e4ce8e', hint: '스페이스를 길게 누르면 더 높이 뛰어요.', x: -26, z: -44, r: 15 },
+  { name: '바람의 탑', color: '#a8d6dc', hint: '탑을 한 바퀴씩 돌며 쉼터까지 올라가세요.', x: 66, z: -49, r: 17 },
+  { name: '부서진 수로', color: '#8be2ca', hint: '청록색 발판이 가까워졌을 때 올라타세요.', x: 119, z: 44, r: 24 },
+  { name: '수정 동굴', color: '#c3a5f2', hint: '돌문으로 들어가 수정 불빛을 따라가세요.', x: 65, z: 153, r: 33 },
+  { name: '회오리 첨탑', color: '#90cbff', hint: '소용돌이를 타고 분홍색 발판에서 솟아오르세요.', x: -138, z: 150, r: 24 },
+  { name: '잿빛 제련소', color: '#f3a17a', hint: '주황색 발판은 밟으면 곧 무너져요.', x: -241, z: -37, r: 30 },
+  { name: '폭풍의 심장', color: '#e0b4ff', hint: '별조각 여섯 개로 수호자의 봉인을 여세요.', x: -113, z: -263, r: 25 },
+] as const;
+
+export type Route = (typeof ROUTES)[number];
+
 export interface Site {
   id: number;
   x: number;
@@ -16,7 +27,7 @@ export interface Site {
 export const WORLD_R = 400;
 /** 이보다 낮아지면 비정상 추락으로 본다 */
 export const FALL_Y = -40;
-export const TOWER_COUNT = 7;
+export const TOWER_COUNT = ROUTES.length;
 const SEED = 4242;
 
 function raw(x: number, z: number, d: number): number {
@@ -53,8 +64,14 @@ export class World implements Terrain {
       if (Math.abs(dx) > s.r + 22 || Math.abs(dz) > s.r + 22) continue;
       const d = Math.hypot(dx, dz);
       if (d >= s.r + 22) continue;
-      const k = d <= s.r ? 1 : 1 - smooth((d - s.r) / 22);
+      if (d <= s.r) { h = s.y; break; }
+      const k = 1 - smooth((d - s.r) / 22);
       h = h + (s.y - h) * k;
+    }
+    const cave = this.sites[4];
+    const cx = Math.abs(x - cave.x), cz = cave.z - z;
+    if (cx < 14 && cz > -28 && cz < 19) {
+      h -= 6.6 * smooth((14 - cx) / 4.5) * smooth((cz + 28) / 4.5) * smooth((19 - cz) / 6);
     }
     return h;
   }
@@ -70,12 +87,8 @@ function smooth(t: number): number { t = Math.max(0, Math.min(1, t)); return t *
 function makeSites(seed: number): Site[] {
   const rnd = mulberry32(seed);
   const sites: Site[] = [{ id: 0, x: 0, z: 0, r: 20, y: 0, role: 'home' }];
-  // 일곱 방향으로 퍼뜨린다. 가까운 탑은 쉬운 길, 먼 탑은 긴 여정
-  const a0 = rnd() * Math.PI * 2;
-  for (let k = 0; k < TOWER_COUNT; k++) {
-    const a = a0 + (k / TOWER_COUNT) * Math.PI * 2 + (rnd() - 0.5) * 0.35;
-    const d = 110 + (k % 3) * 70 + rnd() * 50;
-    sites.push({ id: k + 1, x: Math.cos(a) * d, z: Math.sin(a) * d, r: 17, y: 0, role: 'tower' });
-  }
+  for (const [i, route] of ROUTES.entries()) sites.push({
+    id: i + 1, x: route.x + (rnd() - 0.5) * 2, z: route.z + (rnd() - 0.5) * 2, r: route.r, y: 0, role: 'tower',
+  });
   return sites;
 }

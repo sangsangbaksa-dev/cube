@@ -9,6 +9,7 @@ import { HALF, PhysicsWorld, type Obstacle, type PhysicsInput } from './physics/
 import { surfaceNormal } from './physics/terrain';
 import { ObstacleGrid } from './world/grid';
 import { Tower } from './game/towers';
+import { Guardian } from './game/guardian';
 import { clearSave, loadSave, SHARD_GOAL, writeSave } from './game/progress';
 import { FALL_Y, World } from './world/terrain';
 import { buildWorld, Sky } from './world/render';
@@ -79,6 +80,10 @@ grid.add({ x: home.x, z: home.z, r: 2.2, top: Infinity });
 // ---------- 별의 탑 ----------
 const towers = world.towers.map((s) => new Tower(world, s));
 for (const t of towers) scene.add(t.group);
+const cave = towers[3];
+const final = towers[towers.length - 1];
+const guardian = new Guardian(final.course.platforms.at(-1)!);
+scene.add(guardian.group);
 
 const near: Obstacle[] = [];
 const obstacleSource = {
@@ -86,7 +91,8 @@ const obstacleSource = {
     near.length = 0;
     for (const o of grid.near(x, z)) near.push(o);
     for (const t of towers) {
-      if (Math.abs(x - t.island.x) < 20 && Math.abs(z - t.island.z) < 20) for (const o of t.obstacles) near.push(o);
+      const reach = t.island.r + 5;
+      if (Math.abs(x - t.island.x) < reach && Math.abs(z - t.island.z) < reach) for (const o of t.obstacles) near.push(o);
     }
     return near;
   },
@@ -94,7 +100,7 @@ const obstacleSource = {
 
 // ---------- 진행 ----------
 let save = loadSave();
-const spawnPoint = () => ({ x: home.x + 4, y: homeY + 1, z: home.z + 7 });
+const spawnPoint = () => ({ x: home.x + 11, y: homeY + 1, z: home.z + 1.8 });
 const physics = new PhysicsWorld(world, spawnPoint().x, spawnPoint().z, obstacleSource);
 physics.abilities.airJumps = 0; // 더블점프 없음
 physics.abilities.dash = true;
@@ -131,7 +137,7 @@ hud.onStart(() => {
   input.start();
   audio.unlock();
   window.focus();
-  hud.banner('별빛 큐브', save.shards.length ? `별조각 ${save.shards.length}/${SHARD_GOAL} · 이어서 떠나요` : '금빛 기둥을 따라 별의 탑을 찾아가요', 3800);
+  hud.banner('별빛 큐브', save.shards.length ? `별조각 ${save.shards.length}/${SHARD_GOAL} · 이어서 떠나요` : '등대 옆 돌길을 따라 초원 돌계단으로 떠나요', 3400);
 });
 for (const ev of ['pointerdown', 'keydown'] as const) addEventListener(ev, () => { if (started) audio.unlock(); });
 
@@ -141,26 +147,40 @@ const pos = new THREE.Vector3();
 const normal = new THREE.Vector3();
 const nTmp = { x: 0, y: 1, z: 0 };
 const camTarget = new THREE.Vector3(physics.state.x, physics.state.y, physics.state.z);
-let camYaw = 0.6, camPitch = 0.3, shakeAmt = 0;
+let camYaw = 0.72, camPitch = 0.24, shakeAmt = 0;
 let faceX = 0, faceZ = 1;
 let last = performance.now();
-let clock = 0.15; // 0~1 하루 (0.5가 한밤)
+let clock = 0.09; // 0~1 하루 (0.5가 한밤)
 let stepDist = 0, placeT = 0, objT = 0, emaDt = 1 / 60, prTimer = -5, retCd = 0;
 let lastSafe = { x: physics.state.x, y: physics.state.y, z: physics.state.z };
 const DAY = 300;
 
 function nightAmount() { return 0.5 - 0.5 * Math.cos(clock * Math.PI * 2); }
 
-/** R: 마지막 쉼터(없으면 등대)로 돌아간다 */
-function returnToCheckpoint() {
-  if (!started || retCd > 0) return;
-  const p = save.checkpoint ?? spawnPoint();
+function respawn(p: { x: number; y: number; z: number }) {
   physics.teleport(p.x, p.y, p.z);
   camTarget.set(p.x, p.y, p.z);
   lastSafe = { ...p };
-  retCd = 0.6;
+  retCd = .6;
   audio.respawn();
   particles.emit(p.x, p.y, p.z, 14, { color: '#9ff0ff', speed: 3, up: 3, size: 0.12 });
+}
+
+function routeRespawn(t: Tower, preferStart = false) {
+  const saved = save.checkpoint;
+  if (saved && t.plats.some(({ spec }) => spec.kind === 'checkpoint' && Math.hypot(saved.x - spec.x, saved.z - spec.z) < .5)) {
+    respawn(saved);
+  } else {
+    const p = preferStart ? t.course.platforms[0] : t.course.platforms.find((sp) => sp.kind === 'checkpoint') ?? t.course.platforms[0];
+    respawn({ x: p.x, y: p.y + .57, z: p.z });
+  }
+}
+
+/** R: 마지막 쉼터(없으면 등대)로 돌아간다 */
+function returnToCheckpoint() {
+  if (!started || retCd > 0) return;
+  if (guardian.active) { guardian.reset(); routeRespawn(final); }
+  else respawn(save.checkpoint ?? spawnPoint());
 }
 addEventListener('keydown', (e) => { if (e.code === 'KeyR' && !e.repeat) returnToCheckpoint(); });
 document.getElementById('homeBtn')!.addEventListener('click', (e) => { e.stopPropagation(); returnToCheckpoint(); });
@@ -181,7 +201,10 @@ function gainShard(id: string) {
 function placeName(s: { x: number; z: number }): string {
   const site = world.siteAt(s.x, s.z, 14);
   if (site?.role === 'home') return '등대 언덕';
-  if (site) return save.shards.includes(`tower${site.id}`) ? '별의 탑 (완료)' : '별의 탑';
+  if (site) {
+    const t = towers[site.id - 1];
+    return `${t.info.name} · ${t.collected ? '완료' : `난도 ${site.id}/7`}`;
+  }
   const h = world.height(s.x, s.z);
   const t = Math.sin(s.x * 0.011) + Math.sin(s.z * 0.013 + 1.7) + Math.sin((s.x + s.z) * 0.007);
   if (h > 26) return '눈 덮인 능선';
@@ -197,17 +220,50 @@ function dirIndex(dx: number, dz: number) {
 }
 function updateObjective() {
   const s = physics.state;
+  if (guardian.active) {
+    hud.setObjective(guardian.phase === 'exposed' ? '지금! 핵 위에서 뛰어 내려찍으세요.' :
+      guardian.phase === 'warn' || guardian.phase === 'pulse' ? '충격파가 오면 점프하세요.' : '파동을 피하고 핵이 드러날 때를 기다리세요.');
+    return;
+  }
   if (save.shards.length >= SHARD_GOAL) {
     if (save.won) { hud.setObjective(''); return; }
     const d = Math.hypot(home.x - s.x, home.z - s.z);
     hud.setObjective(d < 12 ? '등대 앞에 서서 불을 밝혀요' : `등대로 돌아가기 · ${DIRS[dirIndex(home.x - s.x, home.z - s.z)]}쪽 ${Math.round(d)}m`);
     return;
   }
-  const left = towers.filter((t) => !t.collected).map((t) => ({ x: t.island.x, z: t.island.z, d: Math.hypot(t.island.x - s.x, t.island.z - s.z) }));
-  left.sort((a, b) => a.d - b.d);
-  const t = left[0];
+  const site = world.siteAt(s.x, s.z, 4);
+  const nearby = site?.id ? towers[site.id - 1] : undefined;
+  const t = nearby && !nearby.collected ? nearby : towers.find((route) => !route.collected);
   if (!t) { hud.setObjective(''); return; }
-  hud.setObjective(t.d < 22 ? '별의 탑 꼭대기에 오르기' : `가장 가까운 별의 탑 · ${DIRS[dirIndex(t.x - s.x, t.z - s.z)]}쪽 ${Math.round(t.d)}m`);
+  const p = t.course.platforms[0], dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz);
+  const local = t === nearby || d < 12;
+  const lowCeiling = t === cave && s.z - cave.island.z > -18 && s.z - cave.island.z < -5.7 && Math.abs(s.x - cave.island.x) < 4.5;
+  let hint: string = t.info.hint;
+  if (lowCeiling) hint = '낮은 천장 아래에서는 점프를 짧게 눌러요.';
+  if (t.island.id === 5 && s.y < t.island.y + 5) hint = '빛나는 벽 끝을 돌아 공중에서 방향을 틀어요.';
+  if (t.island.id === 6 && s.y > t.island.y + 8 && s.y < t.island.y + 11) hint = '벽 바깥쪽으로 뛰어 착지 직전에 방향을 틀어요.';
+  if (t === final && save.shards.length >= SHARD_GOAL - 1) hint = guardian.defeated ? '수호자가 남긴 별조각을 주우세요.' : '봉인이 풀렸어요. 투기장으로 올라가세요.';
+  hud.setObjective(local ? hint : `${t.info.name} · ${DIRS[dirIndex(dx, dz)]}쪽 ${Math.round(d)}m`);
+}
+
+const camRayStart = new THREE.Vector3(), camRayDelta = new THREE.Vector3();
+const camBox = new THREE.Box3(), camRay = new THREE.Ray(), camHit = new THREE.Vector3();
+function cameraOcclusion() {
+  camRayStart.set(camTarget.x, camTarget.y + .26, camTarget.z);
+  camRayDelta.subVectors(camera.position, camRayStart);
+  const length = camRayDelta.length();
+  camRay.set(camRayStart, camRayDelta.normalize());
+  let distance = length;
+  for (const t of towers) {
+    if (Math.hypot(t.island.x - camTarget.x, t.island.z - camTarget.z) > t.island.r + 10) continue;
+    for (const b of t.cameraBlocks) {
+      camBox.min.set(b.x - b.hx! - .12, b.collisionBottom! - .12, b.z - b.hz! - .12);
+      camBox.max.set(b.x + b.hx! + .12, b.top + .12, b.z + b.hz! + .12);
+      if (camBox.containsPoint(camRayStart)) continue;
+      if (camRay.intersectBox(camBox, camHit)) distance = Math.min(distance, camRayStart.distanceTo(camHit) - .12);
+    }
+  }
+  if (distance < length) camera.position.copy(camRayStart).addScaledVector(camRayDelta, Math.max(.52, distance));
 }
 
 function frame(now: number) {
@@ -224,7 +280,8 @@ function frame(now: number) {
   }
   const dt = rawDt;
   const inp = input.read();
-  let attack = input.consumeAttack(), dash = input.consumeDash();
+  const { steps, alpha } = stepper.advance(dt);
+  let attack = steps > 0 && input.consumeAttack(), dash = steps > 0 && input.consumeDash();
   const alive = started;
   if (!alive) {
     input.consumeJump(); attack = dash = false;
@@ -242,7 +299,6 @@ function frame(now: number) {
   let slamPressed = false;
   if (attack && !s.grounded && !s.inWater && s.y - HALF - s.groundY > 1.3 && !s.slamming) { slamPressed = true; audio.slamStart(); }
 
-  const { steps, alpha } = stepper.advance(dt);
   let jumped = false, launched = false, dashed = false, landImpact = 0, slamLanded = false, slamPower = 0;
   let pressed = steps > 0 && input.consumeJump();
   for (let k = 0; k < steps; k++) {
@@ -254,6 +310,19 @@ function frame(now: number) {
     if (dash && k === 0) dash = false;
     if (slamPressed && k === 0) slamPressed = false;
     physics.step(pi);
+    if (alive) {
+      const event = guardian.step(FIXED_DT, s, save.shards.length >= SHARD_GOAL - 1, final.collected);
+      if (event === 'retry') { routeRespawn(final); hud.banner('다시 도전', '충격파를 뛰어넘고, 핵이 드러나면 내려찍어요.', 1800); }
+      if (event === 'hit') { audio.slamImpact(.55); shakeAmt = Math.max(shakeAmt, .48); cube.flash = .55; }
+      if (event === 'strike' || event === 'defeated') {
+        audio.collect(1);
+        particles.emit(s.x, s.y + 1, s.z, 32, { color: '#e0b4ff', speed: 6, up: 4, size: .17 });
+        if (event === 'defeated') {
+          final.setRewardEnabled(true);
+          hud.banner('폭풍 수호자를 쓰러뜨렸어요', '마지막 별조각을 가져가세요.', 2400);
+        }
+      }
+    }
     pressed = false;
     jumped ||= s.jumped; launched ||= s.launched; dashed ||= s.dashed;
     landImpact = Math.max(landImpact, s.landImpact);
@@ -280,6 +349,9 @@ function frame(now: number) {
     if (stepDist > 1.6) { stepDist = 0; audio.step(); }
   }
 
+  const basin = cave.course.recovery!;
+  if (alive && s.y < basin.minY && Math.abs(s.x - basin.x) < basin.hx && Math.abs(s.z - basin.z) < basin.hz) routeRespawn(cave, true);
+
   // 지면에 서 있는 곳을 기억해 두고, 비정상 추락이면 되돌린다
   if (s.grounded && !s.standingOn) lastSafe = { x: s.x, y: s.y + 0.5, z: s.z };
   if (s.y < FALL_Y) { physics.teleport(lastSafe.x, lastSafe.y, lastSafe.z); camTarget.set(lastSafe.x, lastSafe.y, lastSafe.z); }
@@ -294,6 +366,8 @@ function frame(now: number) {
     }
     if (ev.shard) gainShard(ev.shard);
   }
+  guardian.update(time);
+  hud.setBoss(guardian.active, guardian.health, guardian.hearts);
   // 별가루
   for (const d of deco.dust) {
     if (save.dust.includes(d.id)) continue;
@@ -351,7 +425,8 @@ function frame(now: number) {
   camTarget.x += (pos.x - camTarget.x) * k;
   camTarget.z += (pos.z - camTarget.z) * k;
   camTarget.y += (pos.y - camTarget.y) * (s.y < camTarget.y - 6 ? k : ky);
-  const dist = 8;
+  const inCave = Math.abs(s.x - cave.island.x) < 11 && s.z - cave.island.z > -18.8 && s.z - cave.island.z < 26;
+  const dist = inCave ? 5.6 : 8;
   const cp = Math.cos(camPitch);
   camera.position.set(camTarget.x + Math.sin(camYaw) * cp * dist, camTarget.y + 1.2 + Math.sin(camPitch) * dist, camTarget.z + Math.cos(camYaw) * cp * dist);
   const floor = world.height(camera.position.x, camera.position.z);
@@ -361,7 +436,8 @@ function frame(now: number) {
     camera.position.y += (Math.random() - 0.5) * shakeAmt;
     shakeAmt = Math.max(0, shakeAmt - rawDt * 2.5);
   }
-  camera.lookAt(camTarget.x, camTarget.y + 1, camTarget.z);
+  cameraOcclusion();
+  camera.lookAt(camTarget.x, camTarget.y + .8, camTarget.z);
   fog.near = 60 - night * 20; fog.far = 270 - night * 70;
   sky.update(camera, time, night, fog);
   minimap.update(s.x, s.z, faceX, faceZ, rawDt, towers, save.shards);
@@ -376,7 +452,8 @@ requestAnimationFrame(frame);
   teleport: (x: number, z: number, y?: number) => { physics.teleport(x, y ?? world.height(x, z) + 2, z); camTarget.set(x, physics.state.y, z); },
   setClock: (c: number) => { clock = c; },
   sites: () => world.sites.map((i) => ({ id: i.id, role: i.role, x: Math.round(i.x), z: Math.round(i.z), y: Math.round(i.y) })),
-  towers: () => towers.map((t) => ({ id: t.id, start: t.course.platforms[0], goal: t.course.goal })),
+  towers: () => towers.map((t) => ({ id: t.id, name: t.info.name, start: t.course.platforms[0], goal: t.course.goal, platforms: t.course.platforms, barriers: t.course.barriers })),
+  guardian: () => ({ active: guardian.active, phase: guardian.phase, health: guardian.health, hearts: guardian.hearts }),
   dust: () => deco.dust.map((d) => ({ id: d.id, x: d.x, y: d.y, z: d.z })),
-  give: (id: string) => gainShard(id),
+  give: (id: string) => { if (towers.some((t) => t.id === id)) gainShard(id); },
 };

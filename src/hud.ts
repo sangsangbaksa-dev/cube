@@ -5,6 +5,7 @@ if (touch) document.body.classList.add('touch');
 
 const bannerQueue: [string, string, number][] = [];
 let bannerBusy = false;
+let bossStatus = '';
 
 function nextBanner() {
   const b = bannerQueue.shift();
@@ -20,6 +21,17 @@ export const hud = {
   isTouch: touch,
   setPlace(name: string) { $('place').textContent = name; },
   setObjective(text: string) { const o = $('objective'); o.textContent = text; o.hidden = !text; },
+  setBoss(active: boolean, hp: number, hearts: number) {
+    const status = active ? `${hp}/${hearts}` : '';
+    if (status === bossStatus) return;
+    bossStatus = status;
+    $('boss').hidden = !active;
+    if (!active) return;
+    const meter = $<HTMLProgressElement>('bossHealth');
+    meter.value = hp;
+    $('bossHearts').textContent = '◆'.repeat(hearts) + '◇'.repeat(3 - hearts);
+    $('bossHearts').setAttribute('aria-label', `남은 체력 ${hearts}/3`);
+  },
   setGems(n: number, total = 0) { $('gems').textContent = total ? `${n}/${total}` : String(n); },
   setShards(n: number, total: number) {
     const el = $('shards');

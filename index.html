@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>별빛 큐브</title>
-  <meta name="description" content="황혼의 부유섬에서 별의 탑을 오르고 어둠의 균열을 정화하는 파란 큐브의 모험" />
+  <meta name="description" content="황혼의 길을 따라 수정 동굴과 회오리 첨탑을 탐험하는 큐브 파쿠르" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&display=swap" />
@@ -40,6 +40,13 @@
     .place { font-family: var(--display); font-size: 20px; letter-spacing: .04em; text-shadow: 0 2px 10px rgba(10, 6, 30, .8); }
     .objective { padding: 6px 12px; font-size: 13px; line-height: 1.35; text-align: center; }
     .objective::before { content: '◆ '; color: var(--gold); }
+    .boss { position: fixed; left: 50%; bottom: calc(var(--bottom) + 18px); transform: translateX(-50%); width: min(280px, calc(100vw - 40px)); box-sizing: border-box; padding: 11px 14px; pointer-events: none; z-index: 5; }
+    .boss-top { display: flex; justify-content: space-between; align-items: center; gap: 14px; font-size: 13px; font-weight: 600; }
+    .boss-hearts { color: #f7bda0; letter-spacing: .22em; }
+    .boss progress { display: block; width: 100%; height: 5px; margin-top: 8px; border: 0; border-radius: 3px; background: #302641; accent-color: #d6a9f7; overflow: hidden; }
+    .boss progress::-webkit-progress-bar { background: #302641; }
+    .boss progress::-webkit-progress-value { background: #d6a9f7; }
+    .touch .boss { bottom: calc(var(--bottom) + 176px); }
 
     .topright { position: fixed; right: var(--right); top: var(--top); display: flex; gap: 6px; z-index: 5; }
     .chip { padding: 7px 11px; font-size: 12px; border-radius: 10px; }
@@ -75,6 +82,32 @@
     .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #2e8fb0; }
     .link { display: block; margin: 10px auto 0; background: none; border: 0; color: var(--dim); font-size: 12px; text-decoration: underline; }
     @keyframes glow { 50% { box-shadow: 0 0 18px rgba(255, 211, 107, .5); } }
+    body:not(.started) :is(.status,.center,.topright,#minimap) { visibility: hidden; }
+    .landing {
+      justify-items: start; padding-inline: clamp(24px, 8vw, 150px);
+      background: linear-gradient(90deg, rgba(20, 19, 32, .92) 0%, rgba(27, 23, 37, .75) 30%, rgba(37, 29, 44, .12) 75%);
+      overflow-y: auto; touch-action: pan-y;
+    }
+    .landing .card { max-width: 460px; width: 100%; border-radius: 0; padding: 12px 0; text-align: left; }
+    .landing h1 { color: #f7e8d5; background: none; filter: none; font-size: clamp(47px, 7vw, 88px); letter-spacing: -.05em; line-height: 1.1; }
+    .landing .pitch { margin-top: 13px; color: #eddfdf; font-size: 15px; line-height: 1.66; }
+    .edition { display: flex; align-items: center; gap: 9px; margin: 0 0 13px; color: #f0ca93; font-weight: 600; font-size: 12px; letter-spacing: .14em; }
+    .edition::before { content: ''; width: 7px; height: 7px; margin-inline: 2px; transform: rotate(45deg); background: currentColor; }
+    .edition::after { content: ''; width: 46px; height: 1px; background: rgba(240, 202, 147, .52); }
+    .landing .keys { max-width: 368px; margin-top: 24px; gap: 0; border-top: 1px solid rgba(246, 224, 207, .24); }
+    .landing .keys li { padding: 7px 0; background: none; border-radius: 0; border-bottom: 1px solid rgba(246, 224, 207, .17); }
+    .landing .keys b { color: #efdecd; }
+    .landing .keys span, .landing .tip { color: #d1c4d4; }
+    .landing .btn { padding: 12px 25px; margin-top: 21px; border-radius: 6px; background: #eed2a7; box-shadow: none; color: #262335; }
+    .landing .btn::after { content: '→'; margin-left: 20px; }
+    .landing .btn:hover { background: #ffe5bc; }
+    .landing .btn:active { transform: translateY(1px); }
+    .landing .link { margin-left: 0; padding-left: 0; }
+    @media (max-width: 580px) {
+      .landing { padding-inline: 24px; background: linear-gradient(90deg, rgba(20, 19, 32, .92), rgba(28, 21, 39, .6)); }
+      .landing h1 { font-size: clamp(44px, 11vw, 66px); }
+      .landing .keys { margin-top: 16px; }
+    }
 
     /* 터치 조작 */
     .stick { position: fixed; left: max(22px, env(safe-area-inset-left, 0px)); bottom: max(26px, env(safe-area-inset-bottom, 0px)); width: 124px; height: 124px; border-radius: 50%; background: rgba(20, 14, 50, .35); border: 1px solid rgba(160, 150, 255, .45); display: grid; place-items: center; touch-action: none; z-index: 6; }
@@ -84,7 +117,12 @@
     .atkbtn { right: max(122px, calc(env(safe-area-inset-right, 0px) + 100px)); bottom: max(26px, env(safe-area-inset-bottom, 0px)); width: 74px; height: 74px; font-size: 18px; background: rgba(255, 111, 154, .6); }
     .divebtn { right: max(40px, env(safe-area-inset-right, 0px)); bottom: max(134px, calc(env(safe-area-inset-bottom, 0px) + 120px)); width: 62px; height: 62px; font-size: 15px; background: rgba(162, 107, 255, .6); }
     .jumpbtn:active, .atkbtn:active, .divebtn:active { filter: brightness(1.3); transform: scale(.95); }
-    @media (max-width: 560px) { .center { max-width: calc(100vw - 150px); top: calc(var(--top) + 0px); } .place { font-size: 16px; } .objective { font-size: 11px; } .topright .chip { padding: 6px 8px; font-size: 11px; } }
+    @media (max-width: 680px) {
+      .center { max-width: calc(100vw - 38px); top: calc(var(--top) + 39px); }
+      .place { font-size: 16px; } .objective { font-size: 11px; }
+      .topright .chip { padding: 6px 8px; font-size: 11px; }
+      #minimap { top: calc(var(--top) + 108px); width: 84px; height: 84px; }
+    }
   </style>
 </head>
 <body>
@@ -103,13 +141,18 @@
     <button class="chip panel" id="timeBtn" type="button">밤 앞당기기 (T)</button>
     <button class="chip panel" id="muteBtn" type="button">소리 (M)</button>
   </div>
-  <canvas id="minimap" width="240" height="240" aria-label="지도: 별의 탑은 금색, 등대는 하늘색" role="img"></canvas>
+  <canvas id="minimap" width="240" height="240" aria-label="지도: 코스 입구와 등대의 방향" role="img"></canvas>
+  <div id="boss" class="boss panel" hidden>
+    <div class="boss-top"><span>폭풍 수호자</span><span class="boss-hearts" id="bossHearts"></span></div>
+    <progress id="bossHealth" max="3" value="3" aria-label="수호자 체력"></progress>
+  </div>
   <div class="banner" id="banner"><h2 id="bannerTitle"></h2><p id="bannerSub"></p></div>
 
-  <div class="overlay start" id="start">
-    <div class="card panel">
+  <div class="overlay landing" id="start">
+    <div class="card">
+      <p class="edition">황혼의 여정</p>
       <h1>별빛 큐브</h1>
-      <p class="pitch">끝없는 황혼의 들판. 일곱 개의 별의 탑을 오르고<br />별조각을 모아 등대에 불을 밝혀요.</p>
+      <p class="pitch">등대에서 한 걸음씩, 황혼의 일곱 코스로.<br />별조각을 모아 폭풍 수호자의 봉인을 여세요.</p>
       <ul class="keys">
         <li class="kb"><b>WASD · 방향키</b><span>이동</span></li>
         <li class="kb"><b>스페이스</b><span>점프 (누르는 만큼 높이)</span></li>
@@ -121,7 +164,7 @@
         <li class="tc"><b>점프 · 찍기 · 대시</b><span>오른쪽 버튼</span></li>
         <li class="tc"><b>화면 드래그</b><span>시점</span></li>
       </ul>
-      <p class="tip">탑에서 떨어져도 다치지 않아요. 대신 다시 올라야 해요.<br />돌기둥 계단 위의 별가루도 찾아봐요.</p>
+      <p class="tip">돌길과 색이 다른 빛기둥이 코스 입구를 알려 줘요.</p>
       <button class="btn" id="startBtn" type="button">떠나기</button>
       <button class="link" id="resetBtn" type="button" hidden>처음부터 다시 하기</button>
     </div>

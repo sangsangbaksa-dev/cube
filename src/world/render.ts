@@ -1,12 +1,13 @@
 import * as THREE from 'three';
+import { makeRoute, routeInfo } from '../game/routes';
 import type { Obstacle } from '../physics/world';
 import { mulberry32 } from '../util/rand';
 import { WORLD_R, type World } from './terrain';
 
 // 저폴리·플랫 셰이딩 오픈월드. 황혼과 밤 사이를 오가는 하늘.
 const CELL = 3;
-const GRASS_A = new THREE.Color('#4fc3a8'), GRASS_B = new THREE.Color('#8e7bf0'), GRASS_C = new THREE.Color('#f2b25c');
-const ROCK = new THREE.Color('#5b5080'), SNOW = new THREE.Color('#e8e4ff'), PLAZA = new THREE.Color('#cfc8f5');
+const GRASS_A = new THREE.Color('#587f73'), GRASS_B = new THREE.Color('#776f8b'), GRASS_C = new THREE.Color('#b48e64');
+const ROCK = new THREE.Color('#5f596f'), SNOW = new THREE.Color('#c1bdd5'), PLAZA = new THREE.Color('#929086');
 
 function terrainMesh(world: World): THREE.Mesh {
   const n = Math.floor((WORLD_R * 2 + 40) / CELL) + 1, half = (n - 1) * CELL / 2;
@@ -22,7 +23,11 @@ function terrainMesh(world: World): THREE.Mesh {
     c.lerp(tmp.setScalar(0).add(c).multiplyScalar(0.9), (i * 7 + j * 13) % 5 * 0.04);
     if (slope > 2.2) c.lerp(ROCK, Math.min(1, (slope - 2.2) / 2));
     if (h > 26) c.lerp(SNOW, Math.min(1, (h - 26) / 14));
-    if (world.siteAt(x, z, -1)) c.lerp(PLAZA, 0.4);
+    const site = world.siteAt(x, z, 4);
+    if (site) {
+      const a = Math.hypot(x - site.x, z - site.z) / (site.r + 4);
+      c.lerp(site.id === 6 ? ROCK : PLAZA, (1 - a * a) * .52);
+    }
     col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b;
   }
   const idx: number[] = [];
@@ -41,25 +46,88 @@ function terrainMesh(world: World): THREE.Mesh {
 export interface Dust { id: number; x: number; y: number; z: number; mesh: THREE.Mesh }
 export interface Deco { obstacles: Obstacle[]; group: THREE.Group; crystals: THREE.InstancedMesh; dust: Dust[] }
 
-/** 나무·바위·크리스털과 별가루가 놓인 돌기둥 계단 */
-function decorate(world: World): Deco {
+interface Trail { site: World['home']; points: THREE.Vector3[] }
+function makeTrails(world: World): Trail[] {
+  return world.towers.map((site) => {
+    const { x, z } = makeRoute(site).platforms[0];
+    const length = Math.hypot(x, z), ax = x / length, az = z / length;
+    const points: THREE.Vector3[] = [];
+    for (let i = 0, n = Math.ceil(length / 1.6); i <= n; i++) {
+      const t = i / n, along = 9 + t * (length - 9);
+      const bend = Math.sin(t * Math.PI) ** 2 * Math.sin(t * 5.5 + site.id) * Math.min(length * .09, 16);
+      const px = along * ax - bend * az, pz = along * az + bend * ax;
+      points.push(new THREE.Vector3(px, world.height(px, pz), pz));
+    }
+    return { site, points };
+  });
+}
+
+function trailSurface(world: World, trail: Trail): THREE.Mesh {
+  const positions: number[] = [], colors: number[] = [], indices: number[] = [];
+  const c = new THREE.Color(), tint = new THREE.Color(routeInfo(trail.site).color), dust = new THREE.Color('#a39783');
+  const points = trail.points;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i], a = points[Math.max(0, i - 1)], b = points[Math.min(i + 1, points.length - 1)];
+    const dx = b.x - a.x, dz = b.z - a.z, n = Math.hypot(dx, dz);
+    for (let j = 0; j < 5; j++) {
+      const w = (j - 2) * (.55 + .11 * Math.sin(i * .93 + trail.site.id));
+      const x = p.x + dz / n * w, z = p.z - dx / n * w;
+      positions.push(x, world.height(x, z) + .083, z);
+      c.copy(dust).lerp(tint, .1 + .07 * Math.sin(i * .4)).multiplyScalar(j === 0 || j === 4 ? .78 : .94 + .05 * Math.sin(i * 2.7));
+      colors.push(c.r, c.g, c.b);
+      if (i < points.length - 1 && j < 4) {
+        const k = i * 5 + j;
+        indices.push(k, k + 5, k + 1, k + 1, k + 5, k + 6);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.setIndex(indices); geo.computeVertexNormals();
+  return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+}
+
+/** 숲, 바위, 길가의 야생화와 별가루. */
+function decorate(world: World, trails: Trail[]): Deco {
   const group = new THREE.Group();
   const obstacles: Obstacle[] = [];
-  const trees: THREE.Matrix4[] = [], rocks: THREE.Matrix4[] = [], crys: THREE.Matrix4[] = [];
+  const trees: THREE.Matrix4[] = [], rocks: THREE.Matrix4[] = [], crys: THREE.Matrix4[] = [], flowers: THREE.Matrix4[] = [], grass: THREE.Matrix4[] = [];
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const rnd = mulberry32(77);
   const free = (x: number, z: number, pad: number) => !world.siteAt(x, z, pad);
+  const trailGrid = new Map<string, THREE.Vector3[]>();
+  for (const { points } of trails) for (const a of points) {
+    const k = `${Math.floor(a.x / 8)},${Math.floor(a.z / 8)}`;
+    const cell = trailGrid.get(k) ?? [];
+    if (!cell.length) trailGrid.set(k, cell);
+    cell.push(a);
+  }
+  const onPath = (x: number, z: number) => {
+    const gx = Math.floor(x / 8), gz = Math.floor(z / 8);
+    for (let i = -1; i < 2; i++) for (let j = -1; j < 2; j++) {
+      if (trailGrid.get(`${gx + i},${gz + j}`)?.some((a) => Math.hypot(a.x - x, a.z - z) < 3.2)) return true;
+    }
+    return false;
+  };
   const slopeAt = (x: number, z: number) => Math.abs(world.height(x + 1.5, z) - world.height(x - 1.5, z)) + Math.abs(world.height(x, z + 1.5) - world.height(x, z - 1.5));
+  const grassAt = (x: number, z: number) => {
+    const sc = .53 + rnd() * .68;
+    q.setFromEuler(new THREE.Euler(0, rnd() * 6, 0));
+    grass.push(m.compose(p.set(x, world.height(x, z) - .03, z), q, s.set(sc, sc, sc)).clone());
+  };
 
-  for (let k = 0; k < 2600; k++) {
+  for (let k = 0; k < 3650; k++) {
     const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * (WORLD_R - 25);
     const x = Math.cos(a) * d, z = Math.sin(a) * d;
-    if (!free(x, z, 8)) continue;
+    if (!free(x, z, 5) || onPath(x, z)) continue;
     const y = world.height(x, z), slope = slopeAt(x, z);
     if (slope > 2.4 || y > 30) continue;
-    const roll = rnd(), sc = 0.8 + rnd() * 0.8;
+    const roll = rnd(), sc = 0.78 + rnd() * 1.24;
+    const grove = Math.sin(x * .079 + Math.cos(z * .043)) + Math.cos(z * .096) * .62;
     q.setFromEuler(new THREE.Euler(0, rnd() * 6, 0));
     if (roll < 0.62) {
+      if (grove < -.28 && rnd() < .81) continue;
       trees.push(m.compose(p.set(x, y - 0.1, z), q, s.set(sc, sc * (0.9 + rnd() * 0.7), sc)).clone());
       obstacles.push({ x, z, r: 0.45 * sc, top: Infinity });
     } else if (roll < 0.9) {
@@ -69,41 +137,43 @@ function decorate(world: World): Deco {
       crys.push(m.compose(p.set(x, y, z), q, s.set(sc * 0.6, sc * 1.4, sc * 0.6)).clone());
       obstacles.push({ x, z, r: 0.4 * sc, top: Infinity });
     }
+    if (k % 3 === 0) for (let j = 0; j < 3; j++) grassAt(x + rnd() * 4 - 2, z + rnd() * 4 - 2);
   }
 
-  // 돌기둥 계단: 한 번 점프로 오를 수 있는 간격으로 나선을 이루고, 꼭대기에 별가루
-  const pillarGeo = new THREE.CylinderGeometry(1, 1.12, 1, 7);
-  const pillarMat = new THREE.MeshLambertMaterial({ color: '#8c82b8', flatShading: true });
-  const capMat = new THREE.MeshLambertMaterial({ color: '#c9c0f0', flatShading: true });
   const dust: Dust[] = [];
-  const dustGeo = new THREE.OctahedronGeometry(0.34, 0);
-  let id = 0;
-  for (let k = 0, tries = 0; k < 26 && tries < 400; tries++) {
-    const a = rnd() * Math.PI * 2, d = 30 + Math.sqrt(rnd()) * (WORLD_R - 80);
-    const cx = Math.cos(a) * d, cz = Math.sin(a) * d;
-    if (!free(cx, cz, 32) || slopeAt(cx, cz) > 1.2) continue;
-    k++;
-    const steps = 3 + Math.floor(rnd() * 4), dir = rnd() * Math.PI * 2, turn = rnd() < 0.5 ? 1 : -1;
-    let px = cx, pz = cz;
-    for (let i = 0; i < steps; i++) {
-      if (i > 0) { const aa = dir + turn * i * 0.55; px += Math.cos(aa) * 3.4; pz += Math.sin(aa) * 3.4; }
-      const ground = world.height(px, pz);
-      const top = world.height(cx, cz) + 1.5 * (i + 1);
-      const r = 1.15 - i * 0.05;
-      const pl = new THREE.Mesh(pillarGeo, pillarMat);
-      const bottom = Math.min(ground, top - 0.5) - 1;
-      pl.scale.set(r, top - bottom, r);
-      pl.position.set(px, (top + bottom) / 2, pz);
-      const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.05, r * 1.05, 0.12, 7), capMat);
-      cap.position.set(px, top - 0.06, pz);
-      group.add(pl, cap);
-      obstacles.push({ x: px, z: pz, r: r, top });
-      if (i === steps - 1) {
-        const mesh = new THREE.Mesh(dustGeo, new THREE.MeshBasicMaterial({ color: '#ffe27a' }));
-        mesh.position.set(px, top + 1.1, pz);
-        group.add(mesh);
-        dust.push({ id: id++, x: px, y: top + 1.1, z: pz, mesh });
+  const dustGeo = new THREE.OctahedronGeometry(.27, 0);
+  const dustMat = new THREE.MeshBasicMaterial({ color: '#ffe1a3' });
+  const marker = new THREE.CylinderGeometry(.17, .23, 1, 5);
+  const markerMat = new THREE.MeshLambertMaterial({ color: '#535366' });
+  for (const trail of trails) {
+    group.add(trailSurface(world, trail));
+    const { points, site } = trail;
+    const mat = new THREE.MeshBasicMaterial({ color: routeInfo(site).color });
+    for (let i = 3; i < points.length - 3; i += 5) {
+      const a = points[i], b = points[i + 1], dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz);
+      const side = i % 2 ? 1 : -1;
+      if (i === 3 || i % 15 === 3) {
+        const x = a.x + dz / len * 1.95 * side, z = a.z - dx / len * 1.95 * side, y = world.height(x, z);
+        const post = new THREE.Mesh(marker, markerMat);
+        post.position.set(x, y + .52, z);
+        const tip = new THREE.Mesh(dustGeo, mat); tip.position.set(x, y + 1.16, z); tip.scale.setScalar(.72);
+        group.add(post, tip);
       }
+      for (let k = 0; k < 8; k++) {
+        const offset = 2.25 + rnd() * 3, shift = (rnd() - .5) * 5;
+        const x = a.x + dx / len * shift + side * dz / len * offset, z = a.z + dz / len * shift - side * dx / len * offset;
+        const y = world.height(x, z), sc = .22 + rnd() * .47;
+        q.setFromEuler(new THREE.Euler(0, rnd() * 6, (rnd() - .5) * .33));
+        if (k % 3 === 0) flowers.push(m.compose(p.set(x, y, z), q, s.set(sc, sc, sc)).clone());
+        grassAt(x, z);
+      }
+    }
+    for (const f of [.24, .51, .77]) {
+      const a = points[Math.floor(points.length * f)];
+      const mesh = new THREE.Mesh(dustGeo, dustMat);
+      mesh.position.set(a.x, a.y + .8, a.z);
+      group.add(mesh);
+      dust.push({ id: dust.length, x: a.x, y: a.y + .8, z: a.z, mesh });
     }
   }
 
@@ -117,13 +187,37 @@ function decorate(world: World): Deco {
     group.add(im);
     return im;
   };
-  add(treeGeo, new THREE.MeshLambertMaterial({ color: '#2f7f7a', flatShading: true }), trees);
-  add(t2, new THREE.MeshLambertMaterial({ color: '#3b9a8c', flatShading: true }), trees);
+  const firs = add(treeGeo, new THREE.MeshLambertMaterial({ color: '#467a70', flatShading: true }), trees);
+  const canopy = add(t2, new THREE.MeshLambertMaterial({ color: '#609482', flatShading: true }), trees);
+  for (let k = 0; k < trees.length; k++) {
+    const c = new THREE.Color().setHSL(.34 + rnd() * .13, .19, .65 + rnd() * .27);
+    firs.setColorAt(k, c); canopy.setColorAt(k, c);
+  }
   add(trunk, new THREE.MeshLambertMaterial({ color: '#5a3c4a', flatShading: true }), trees);
   const rockGeo = new THREE.DodecahedronGeometry(1, 0); rockGeo.translate(0, 0.35, 0);
   add(rockGeo, new THREE.MeshLambertMaterial({ color: '#6a6290', flatShading: true }), rocks);
   const cGeo = new THREE.OctahedronGeometry(0.7, 0); cGeo.translate(0, 0.7, 0);
   const crystals = add(cGeo, new THREE.MeshLambertMaterial({ color: '#7ff0ff', emissive: '#38c8ff', emissiveIntensity: 0.6, flatShading: true }), crys);
+  const blooms = add(new THREE.IcosahedronGeometry(.42, 0), new THREE.MeshLambertMaterial({ color: '#d9be97', flatShading: true }), flowers);
+  blooms.geometry.translate(0, .62, 0);
+  for (let k = 0; k < flowers.length; k++) blooms.setColorAt(k, new THREE.Color(k % 6 < 4 ? '#e0d6af' : k % 6 === 4 ? '#c3a1b7' : '#9ab5bc'));
+  const stems = new THREE.CylinderGeometry(.049, .065, .64, 4); stems.translate(0, .32, 0);
+  add(stems, new THREE.MeshLambertMaterial({ color: '#7d9580' }), flowers);
+  const tufts: number[] = [];
+  for (let k = 0; k < 6; k++) {
+    const a = k * 2.399, x = Math.cos(a) * .28, z = Math.sin(a) * .28, h = .39 + rnd() * .33;
+    tufts.push(x - .095, 0, z, x + .095, 0, z, x * 1.9 + .05, h, z * 1.9);
+  }
+  const blades = new THREE.BufferGeometry();
+  blades.setAttribute('position', new THREE.Float32BufferAttribute(tufts, 3)); blades.computeVertexNormals();
+  const grassMesh = add(blades, new THREE.MeshLambertMaterial({ color: '#91aa86', side: THREE.DoubleSide }), grass);
+  for (let k = 0; k < grass.length; k++) grassMesh.setColorAt(k, new THREE.Color(k % 3 === 0 ? '#b6a589' : '#8fafad'));
+  const courtyard = new THREE.Mesh(new THREE.RingGeometry(4.05, 8.8, 56), new THREE.MeshLambertMaterial({ color: '#9a9395' }));
+  courtyard.rotation.x = -Math.PI / 2; courtyard.position.set(0, world.home.y + .042, 0);
+  group.add(courtyard);
+  const trim = new THREE.Mesh(new THREE.RingGeometry(8.7, 8.82, 56), new THREE.MeshBasicMaterial({ color: '#c9b6a6' }));
+  trim.rotation.x = -Math.PI / 2; trim.position.set(0, world.home.y + .048, 0);
+  group.add(trim);
   return { obstacles, group, crystals, dust };
 }
 
@@ -146,8 +240,12 @@ export class Sky {
       uniforms: { top: this.uTop, hor: this.uHor, low: this.uLow },
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
       fragmentShader: `uniform vec3 top; uniform vec3 hor; uniform vec3 low; varying vec3 vP;
-        void main(){ float y = vP.y; vec3 c = y > 0. ? mix(hor, top, pow(y, .55)) : mix(hor, low, pow(-y, .4));
-        gl_FragColor = vec4(c, 1.); }`,
+        void main(){ vec3 d = normalize(vP); float y = d.y; vec3 c = y > 0. ? mix(hor, top, pow(y, .58)) : mix(hor, low, pow(-y, .4));
+        float s = max(0., dot(d, normalize(vec3(-.58,.105,-.81))));
+        c += vec3(.58,.23,.087) * pow(s, 22.) * hor.r + vec3(1.,.61,.33)*smoothstep(.99915,.99935,s)*hor.r;
+        gl_FragColor = vec4(c, 1.);
+        #include <colorspace_fragment>
+        }`,
     }));
     dome.renderOrder = -10;
     this.group.add(dome);
@@ -186,9 +284,9 @@ export class Sky {
     this.uTime.value = time;
     this.uNight.value = night;
     const lerp = (a: string, b: string, out: THREE.Color) => out.set(a).lerp(new THREE.Color(b), night);
-    lerp('#4b3f9e', '#0d0b26', this.uTop.value);
-    lerp('#ff9a7a', '#4a2c6e', this.uHor.value);
-    lerp('#6b4a9a', '#1a1238', this.uLow.value);
+    lerp('#596994', '#141733', this.uTop.value);
+    lerp('#e7a68a', '#585379', this.uHor.value);
+    lerp('#8c7488', '#302944', this.uLow.value);
     fog.color.copy(this.uHor.value).lerp(this.uLow.value, 0.45);
     (this.stars.material as THREE.PointsMaterial).opacity = 0.15 + night * 0.85;
     this.sun.color.set('#ffb889').lerp(new THREE.Color('#8fa0ff'), night);
@@ -202,7 +300,7 @@ export class Sky {
 
 export function buildWorld(world: World, scene: THREE.Scene): Deco {
   scene.add(terrainMesh(world));
-  const deco = decorate(world);
+  const deco = decorate(world, makeTrails(world));
   scene.add(deco.group);
   return deco;
 }

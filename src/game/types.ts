@@ -13,6 +13,7 @@ export interface PlatformSpec {
   thickness: number;
   /** moving: 중심 기준으로 (ax,ay,az) 진폭만큼 sin으로 왕복. period 초, phase 0~1 */
   move?: { ax: number; ay: number; az: number; period: number; phase: number };
+  orbit?: { radius: number; period: number; phase: number };
   /** bounce: 점프 속도의 몇 배로 쏘아 올리는가 */
   launch?: number;
 }

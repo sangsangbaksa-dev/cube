@@ -2,14 +2,17 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Obstacle, PhysicsState } from '../physics/world';
 import type { Site, World } from '../world/terrain';
-import { generateCourse } from './courses';
+import { makeRoute, routeInfo, type RouteCourse } from './routes';
+import { buildLandmark } from './landmarks';
 import { createShard } from './shard';
-import type { CourseSpec, PlatformSpec } from './types';
+import type { PlatformSpec } from './types';
 
 // 별의 탑: 기둥 둘레를 나선으로 오르는 파쿠르. 발판은 물리 충돌체이자 메시다.
-const COLORS: Record<string, string> = {
-  static: '#d8d0ff', moving: '#7fd6ff', crumble: '#e0a56b', bounce: '#ff7ac8', checkpoint: '#8ff0c0', goal: '#ffd36b',
+const COLORS: Partial<Record<PlatformSpec['kind'], string>> = {
+  moving: '#8ae4d5', crumble: '#ef9666', bounce: '#f092cd', checkpoint: '#a5efbd', goal: '#ffd98f',
 };
+const EDGE = new THREE.BoxGeometry();
+const LIGHT = new THREE.OctahedronGeometry(0.27, 0);
 
 interface Plat {
   spec: PlatformSpec;
@@ -26,45 +29,64 @@ export class Tower {
   readonly group = new THREE.Group();
   readonly obstacles: Obstacle[] = [];
   readonly plats: Plat[] = [];
-  readonly course: CourseSpec;
+  readonly course: RouteCourse;
   readonly id: string;
+  readonly info;
+  readonly cameraBlocks: Obstacle[] = [];
   private readonly shard = createShard();
   private readonly beam: THREE.Mesh;
+  private rewardEnabled: boolean;
   collected = false;
   private t = 0;
 
   constructor(world: World, readonly island: Site) {
-    this.id = `tower${island.id}`;
-    let course: CourseSpec | null = null;
-    for (let s = 0; !course && s < 8; s++) {
-      try { course = generateCourse(this.id, island.x, island.z, world.height(island.x, island.z), island.id * 977 + s); } catch { /* 다른 시드로 */ }
+    this.course = makeRoute(island);
+    this.id = this.course.id;
+    this.info = routeInfo(island);
+    this.rewardEnabled = island.id !== 7;
+    buildLandmark(world, island, this.course, this.group, this.obstacles);
+    for (const b of this.course.barriers) {
+      const ob = { x: b.x, z: b.z, r: 0, hx: b.hx, hz: b.hz, top: b.top, collisionBottom: b.bottom };
+      this.obstacles.push(ob);
+      this.cameraBlocks.push(ob);
     }
-    this.course = course!;
-    const goal = this.course.platforms[this.course.platforms.length - 1];
-    // 가운데 기둥
-    const pillarH = goal.y - 0.2 - (island.y - 3);
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.4, pillarH, 8), new THREE.MeshLambertMaterial({ color: '#5b4f8a', flatShading: true }));
-    pillar.position.set(island.x, island.y - 3 + pillarH / 2, island.z);
-    this.group.add(pillar);
-    // 기둥을 감는 빛 띠
-    for (let k = 0; k < 6; k++) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(2.25, 0.06, 4, 24), new THREE.MeshBasicMaterial({ color: '#9fe8ff' }));
-      ring.rotation.x = Math.PI / 2;
-      ring.position.set(island.x, island.y + 4 + k * (pillarH - 6) / 6, island.z);
-      this.group.add(ring);
-    }
-    this.obstacles.push({ x: island.x, z: island.z, r: 2.2, top: goal.y - 0.2 });
 
+    const surfaces = new Map<string, THREE.MeshLambertMaterial>();
+    const sides = new Map<string, THREE.MeshLambertMaterial>();
+    const trims = new Map<string, THREE.MeshBasicMaterial>();
     for (const spec of this.course.platforms) {
       const h = spec.thickness;
+      const tint = island.id === 7 && spec.kind === 'goal' ? '#8e809e' : COLORS[spec.kind] ?? this.info.color;
+      if (!surfaces.has(tint)) {
+        const col = new THREE.Color(tint);
+        surfaces.set(tint, new THREE.MeshLambertMaterial({ color: col, flatShading: true, emissive: col, emissiveIntensity: .18 }));
+        sides.set(tint, new THREE.MeshLambertMaterial({ color: col.clone().multiplyScalar(.35), flatShading: true }));
+        trims.set(tint, new THREE.MeshBasicMaterial({ color: col }));
+      }
       const mesh = new THREE.Mesh(
-        new RoundedBoxGeometry(spec.hx * 2, h, spec.hz * 2, 2, 0.12),
-        new THREE.MeshLambertMaterial({ color: COLORS[spec.kind], flatShading: true, emissive: COLORS[spec.kind], emissiveIntensity: spec.kind === 'bounce' || spec.kind === 'goal' ? 0.45 : 0.08 }),
+        new RoundedBoxGeometry(spec.hx * 2, h, spec.hz * 2, 1, 0.07),
+        sides.get(tint),
       );
       mesh.position.set(spec.x, spec.y - h / 2, spec.z);
       this.group.add(mesh);
+      const surface = new THREE.Mesh(EDGE, surfaces.get(tint));
+      surface.position.y = h / 2 - .05;
+      surface.scale.set(spec.hx * 1.99, .105, spec.hz * 1.99);
+      mesh.add(surface);
+      for (const f of [-1, 1]) {
+        const trim = new THREE.Mesh(EDGE, trims.get(tint));
+        trim.scale.set(spec.hx * 1.56, .033, .035);
+        trim.position.set(0, h / 2 + .012, f * (spec.hz - .12));
+        mesh.add(trim);
+      }
+      if (spec.kind === 'bounce') {
+        const mark = new THREE.Mesh(new THREE.RingGeometry(.38, .47, 4), trims.get(tint));
+        mark.rotation.x = -Math.PI / 2;
+        mark.position.y = h / 2 + .02;
+        mesh.add(mark);
+      }
       if (spec.kind === 'checkpoint') {
-        const lamp = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), new THREE.MeshBasicMaterial({ color: '#b6ffd9' }));
+        const lamp = new THREE.Mesh(LIGHT, trims.get(tint));
         lamp.position.set(spec.hx * 0.6, h / 2 + 1.1, spec.hz * 0.6);
         const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 4), new THREE.MeshLambertMaterial({ color: '#4a3d6b' }));
         post.position.set(spec.hx * 0.6, h / 2 + 0.45, spec.hz * 0.6);
@@ -80,17 +102,24 @@ export class Tower {
     this.shard.group.position.set(this.course.goal.x, this.course.goal.y, this.course.goal.z);
     this.group.add(this.shard.group);
     this.beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.6, 1.4, 160, 12, 1, true),
-      new THREE.MeshBasicMaterial({ color: '#ffd36b', transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+      new THREE.CylinderGeometry(0.28, .66, 75, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color: this.info.color, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
     );
-    this.beam.position.set(this.course.goal.x, this.course.goal.y + 80, this.course.goal.z);
+    const start = this.course.platforms[0];
+    this.beam.position.set(start.x, start.y + 37.5, start.z);
     this.group.add(this.beam);
+    this.setCollected(false);
   }
 
   setCollected(c: boolean) {
     this.collected = c;
-    this.shard.group.visible = !c;
+    this.shard.group.visible = !c && this.rewardEnabled;
     this.beam.visible = !c;
+  }
+
+  setRewardEnabled(enabled: boolean) {
+    this.rewardEnabled = enabled;
+    this.shard.group.visible = enabled && !this.collected;
   }
 
   /** 물리 스텝 직전에 호출: 움직이는 발판과 부서지는 발판 */
@@ -99,9 +128,13 @@ export class Tower {
     for (const p of this.plats) {
       const ob = p.ob, sp = p.spec;
       ob.dx = ob.dy = ob.dz = 0;
-      if (sp.move) {
-        const w = Math.sin((this.t / sp.move.period + sp.move.phase) * Math.PI * 2);
-        const nx = p.bx + sp.move.ax * w, ny = p.by + sp.move.ay * w, nz = p.bz + sp.move.az * w;
+      if (sp.move || sp.orbit) {
+        const m = sp.move, o = sp.orbit;
+        const { period, phase } = (m ?? o)!;
+        const a = (this.t / period + phase) * Math.PI * 2, w = Math.sin(a);
+        const nx = p.bx + (m ? m.ax * w : o!.radius * Math.cos(a));
+        const ny = p.by + (m ? m.ay * w : 0);
+        const nz = p.bz + (m ? m.az * w : o!.radius * w);
         ob.dx = nx - ob.x; ob.dy = ny - ob.top; ob.dz = nz - ob.z;
         ob.x = nx; ob.z = nz; ob.top = ny; ob.collisionBottom = ny - sp.thickness;
       }
@@ -135,12 +168,13 @@ export class Tower {
       } else {
         m.position.set(p.ob.x, p.ob.top - sp.thickness / 2, p.ob.z);
       }
-      if (sp.kind === 'checkpoint' && st.standingOn === p.ob) ev.checkpoint = { x: sp.x, y: sp.y + 0.6, z: sp.z };
+      if (!this.collected && sp.kind === 'checkpoint' && st.standingOn === p.ob) ev.checkpoint = { x: sp.x, y: sp.y + 0.6, z: sp.z };
     }
     this.shard.update(time);
     (this.beam.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.06 * Math.sin(time * 2);
     const g = this.course.goal;
-    if (!this.collected && Math.hypot(st.x - g.x, st.y - g.y, st.z - g.z) < 1.5) ev.shard = this.id;
+    if (!this.collected && this.rewardEnabled && st.standingOn === this.plats.at(-1)?.ob
+      && Math.hypot(st.x - g.x, st.y - g.y, st.z - g.z) < 1.5) ev.shard = this.id;
     return ev;
   }
 }
