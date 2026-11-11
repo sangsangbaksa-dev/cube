@@ -33,6 +33,39 @@ describe('GameAudio without an AudioContext', () => {
     for (const cue of cues) expect(() => cue()).not.toThrow();
   });
 
+  it('runs the achievement, combo, shop and quest cues as no-ops', () => {
+    const audio = new GameAudio();
+    const cues: Array<() => void> = [
+      () => audio.achievement(),
+      () => audio.comboTick(1),
+      () => audio.comboTick(40),
+      () => audio.comboEnd(0, false),
+      () => audio.comboEnd(12345, true),
+      () => audio.comboBreak(),
+      () => audio.coin(),
+      () => audio.questDone(),
+      () => audio.meteorFall(),
+      () => audio.meteorImpact(),
+      () => audio.purchase(),
+      () => audio.ghostStart(),
+    ];
+    for (const cue of cues) expect(() => cue()).not.toThrow();
+  });
+
+  it('tolerates odd combo and score inputs without an AudioContext', () => {
+    const audio = new GameAudio();
+    expect(() => {
+      audio.comboTick(0);
+      audio.comboTick(-5);
+      audio.comboTick(Number.NaN);
+      audio.comboTick(Number.POSITIVE_INFINITY);
+      audio.comboTick(1e9);
+      audio.comboEnd(Number.NaN, false);
+      audio.comboEnd(-100, true);
+      audio.comboEnd(Number.POSITIVE_INFINITY, false);
+    }).not.toThrow();
+  });
+
   it('accepts threat and low-health state and runs update() without throwing', () => {
     const audio = new GameAudio();
     expect(() => {

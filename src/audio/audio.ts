@@ -353,6 +353,79 @@ export class GameAudio {
     this.burst(0.08, 0.04, 'bandpass', 2000, 1200, undefined, 0.22);
   }
 
+  // ---- 업적·콤보·상점·퀘스트 효과음 ----
+  /** 업적 달성: 밝은 삼각파 3음 상승 팡파르 + 반짝이는 고음 (약 0.6초) */
+  achievement() {
+    const r = this.vary(0.01);
+    [659, 880, 1319].forEach((f, i) => this.tone(f * r, 0.3, 'triangle', 0.14, undefined, i * 0.1));
+    this.tone(2637 * r, 0.35, 'sine', 0.05, undefined, 0.22);
+    this.burst(0.25, 0.05, 'highpass', 6000, 10000, undefined, 0.24);
+  }
+  /** 콤보 틱: 체인이 오를수록 5음계를 따라 올라가는 짧은 '띵' (최대 2옥타브) */
+  comboTick(chain: number) {
+    const n = SCALE.length;
+    const c = Number.isFinite(chain) ? Math.floor(chain) : 1;
+    const step = clamp(c - 1, 0, n * 2 - 1);
+    const oct = Math.floor(step / n);
+    const f = 523.25 * 2 ** ((SCALE[step % n] + oct * 12) / 12) * this.vary(0.01);
+    this.tone(f, 0.12, 'triangle', 0.12);
+    this.tone(f * 2, 0.08, 'sine', 0.03);
+  }
+  /** 콤보 정산: 점수가 클수록 화음이 길고 밝아진다. 신기록이면 음 하나를 더 얹는다 */
+  comboEnd(score: number, newBest: boolean) {
+    const s = Number.isFinite(score) ? Math.max(0, score) : 0;
+    const k = clamp(Math.log10(s + 10) / 4, 0.25, 1); // 0점 0.25 ~ 만점 1
+    const dur = 0.35 + k * 0.5;
+    const vol = 0.07 + k * 0.06;
+    const root = 523.25;
+    [1, 5 / 4, 3 / 2].forEach((ratio) => this.tone(root * ratio, dur, 'triangle', vol));
+    if (k > 0.5) this.tone(root * 2 * 3 / 2, dur * 0.8, 'sine', vol * 0.5, undefined, 0.04);
+    if (newBest) this.tone(root * 2, 0.7, 'triangle', 0.1, undefined, 0.2);
+  }
+  /** 콤보 끊김: 내려가는 둔탁한 소리 */
+  comboBreak() {
+    const r = this.vary(0.03);
+    this.tone(330 * r, 0.32, 'triangle', 0.13, 110 * r);
+    this.burst(0.18, 0.1, 'lowpass', 600, 120);
+  }
+  /** 동전: 높은 '칭' 두 음 (사각파 짧게 + 삼각파) */
+  coin() {
+    const r = this.vary(0.03);
+    this.tone(988 * r, 0.09, 'square', 0.05);
+    this.tone(1319 * r, 0.24, 'triangle', 0.13, undefined, 0.07);
+  }
+  /** 퀘스트 완료: 부드러운 종소리 두 음 */
+  questDone() {
+    const r = this.vary(0.01);
+    this.tone(784 * r, 0.9, 'sine', 0.14);
+    this.tone(1175 * r, 1.1, 'sine', 0.1, undefined, 0.18);
+  }
+  /** 유성 낙하: 멀리서 하강하는 쉭 소리 (노이즈 + 하강 필터 스윕, 1.5초) */
+  meteorFall() {
+    this.burst(1.5, 0.12, 'bandpass', 2200, 300);
+    this.burst(1.5, 0.05, 'highpass', 4000, 1200);
+  }
+  /** 유성 충돌: 낮은 쿵 + 반짝임 */
+  meteorImpact() {
+    const r = this.vary();
+    this.tone(110 * r, 0.6, 'sine', 0.26, 38);
+    this.burst(0.4, 0.14, 'lowpass', 700, 120);
+    this.tone(1568 * r, 0.25, 'triangle', 0.05, undefined, 0.06);
+    this.burst(0.3, 0.05, 'highpass', 6000, 9000, undefined, 0.06);
+  }
+  /** 구매 완료: 짧은 상승 아르페지오 */
+  purchase() {
+    const r = this.vary(0.02);
+    [659, 784, 988, 1319].forEach((f, i) => this.tone(f * r, 0.22, 'triangle', 0.1, undefined, i * 0.06));
+  }
+  /** 유령 등장: 신비로운 짧은 글리산도 (두 겹으로 위로 미끄러진다) */
+  ghostStart() {
+    const r = this.vary(0.02);
+    this.tone(220 * r, 0.8, 'sine', 0.13, 880 * r);
+    this.tone(330 * r, 0.8, 'triangle', 0.05, 1320 * r, 0.06);
+    this.burst(0.6, 0.04, 'bandpass', 800, 2400);
+  }
+
   /** 주변 적 위협도 0~1과 보스 여부. 전투 음악 층과 오르골 덕킹에 쓰인다 */
   setThreat(level: number, boss: boolean) {
     this.threat = clamp(level, 0, 1);
