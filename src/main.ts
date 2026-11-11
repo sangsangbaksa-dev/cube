@@ -28,6 +28,8 @@ import { MeteorShower } from './game/meteors';
 import { MeteorRender } from './fx/meteor-render';
 import { GhostRecorder, GhostStore, ghostAt, type GhostTrack } from './game/ghost';
 import { GhostCube } from './fx/ghost-render';
+import { MEDAL_INFO, medalFor, medalRank, parTimes } from './game/medals';
+import { resultsUI } from './ui/results-ui';
 
 // ---------- 장면 ----------
 const app = document.getElementById('app')!;
@@ -202,6 +204,7 @@ const dialogOpts = {
   onOpen: () => { input.clear(); document.exitPointerLock?.(); },
   onClose: () => input.clear(),
 };
+const results = resultsUI();
 const wardrobe = new Wardrobe();
 const closet = wardrobeUI(wardrobe, {
   ...dialogOpts,
@@ -355,6 +358,10 @@ function finishExpedition(tower: Tower) {
   const best = save.records[tower.id];
   const improved = best === undefined || time < best;
   const track = recorder.finish();
+  const par = parTimes(tower.course.platforms);
+  const medal = medalFor(time, par);
+  const newMedal = medal !== null && medalRank(medal) > medalRank(medalFor(best ?? Infinity, par));
+  const ghostTime = ghostTrack ? (ghostTrack.points.length / 3 - 1) * ghostTrack.dt : undefined;
   if (improved) {
     ghostStore.set(tower.id, track);
     save.records[tower.id] = time;
@@ -365,7 +372,14 @@ function finishExpedition(tower: Tower) {
   endExpedition();
   bus.emit({ type: 'expedition', id: tower.id, time, improved });
   audio.shard();
-  hud.banner(tower.info.name, improved ? `새 기록 · ${formatRun(time)}` : `완주 ${formatRun(time)} · 최고 ${formatRun(best)}`, 2300);
+  results.show({
+    course: tower.info.name, color: tower.info.color, time, best: improved ? time : best, improved, medal, newMedal, par,
+    ghostDelta: ghostTime === undefined ? undefined : time - ghostTime,
+  });
+  if (newMedal && medal) {
+    earn(MEDAL_INFO[medal].coins, `메달 · ${MEDAL_INFO[medal].name}`);
+    hud.banner(MEDAL_INFO[medal].name, `${tower.info.name} 메달 획득`, 2300);
+  }
   const { x, y, z } = physics.state;
   particles.emit(x, y + .4, z, 34, { color: tower.info.color, speed: 5, up: 5, size: .14 });
 }

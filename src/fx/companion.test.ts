@@ -40,9 +40,9 @@ describe('FollowerMotion', () => {
     const m = new FollowerMotion();
     m.step(FRAME, { x: 0, y: 0, z: 0 }, 1, 0, 0); // 동쪽(+X)을 본다
     const p = m.step(FRAME, { x: 0, y: 0, z: 0 }, 1, 0, 0);
-    // 뒤 1.3 => x=-1.3, 오른쪽(바라보는 +X 기준 -Z쪽) 0.7 => z=-0.7 (처음 스냅 직후라 거의 도달)
+    // 뒤 1.3 => x=-1.3, 오른쪽(+X를 볼 때 오른쪽은 +Z) 0.7 => z=+0.7
     expect(p.x).toBeCloseTo(-1.3, 6);
-    expect(p.z).toBeCloseTo(-0.7, 6);
+    expect(p.z).toBeCloseTo(0.7, 6);
   });
 
   it('목표가 25m 이상 떨어지면 즉시 스냅한다', () => {

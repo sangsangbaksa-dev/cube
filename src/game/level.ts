@@ -97,7 +97,7 @@ function loadSave(storage: LevelStorage): LevelSave {
 }
 
 export class Level {
-  private total = 0;
+  private sum = 0;
   private carry = 0;
   private lvl = 1;
   private dirty = false;
@@ -109,9 +109,9 @@ export class Level {
   constructor(storage?: LevelStorage) {
     this.storage = storage ?? { get: () => readJSON<LevelSave>(KEY), set: (v) => writeJSON(KEY, v) };
     const s = loadSave(this.storage);
-    this.total = s.total;
+    this.sum = s.total;
     this.carry = s.carry;
-    this.lvl = levelOf(this.total);
+    this.lvl = levelOf(this.sum);
   }
 
   /** 이벤트를 받아 XP를 더한다. 새로 오른 레벨 정보를 돌려준다 */
@@ -131,11 +131,11 @@ export class Level {
   get lastReason(): string { return this.reason; }
   get level(): number { return this.lvl; }
   /** 현재 레벨 안에서 쌓인 경험치 */
-  get xp(): number { return this.total - CUM[this.lvl]; }
+  get xp(): number { return this.sum - CUM[this.lvl]; }
   /** 다음 레벨까지 필요한 경험치. 최대 레벨이면 0 */
   get need(): number { return this.lvl >= MAX_LEVEL ? 0 : needXp(this.lvl); }
   /** 누적 경험치 */
-  get total_(): number { return this.total; }
+  get total(): number { return this.sum; }
   get title(): string { return titleFor(this.lvl); }
   /** 0~1 */
   get progress(): number { return this.need === 0 ? 1 : this.xp / this.need; }
@@ -160,10 +160,10 @@ export class Level {
   }
 
   private add(xp: number, saveNow: boolean): LevelUp[] {
-    if (xp <= 0 || this.total >= MAX_TOTAL) return [];
+    if (xp <= 0 || this.sum >= MAX_TOTAL) return [];
     const before = this.lvl;
-    this.total = Math.min(MAX_TOTAL, this.total + xp);
-    this.lvl = levelOf(this.total);
+    this.sum = Math.min(MAX_TOTAL, this.sum + xp);
+    this.lvl = levelOf(this.sum);
     this.dirty = true;
     const ups: LevelUp[] = [];
     for (let L = before + 1; L <= this.lvl; L++) {
@@ -177,6 +177,6 @@ export class Level {
   private save(): void {
     this.dirty = false;
     this.sinceSave = 0;
-    try { this.storage.set({ total: this.total, carry: this.carry }); } catch { /* 이번 판만 */ }
+    try { this.storage.set({ total: this.sum, carry: this.carry }); } catch { /* 이번 판만 */ }
   }
 }
