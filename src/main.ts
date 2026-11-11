@@ -15,6 +15,7 @@ import { clearSave, loadSave, SHARD_GOAL, writeSave } from './game/progress';
 import { FALL_Y, World } from './world/terrain';
 import { buildWorld, Sky } from './world/render';
 import { Minimap } from './minimap';
+import { EventBus } from './game/events';
 
 // ---------- 장면 ----------
 const app = document.getElementById('app')!;
@@ -101,6 +102,7 @@ const obstacleSource = {
 };
 
 // ---------- 진행 ----------
+const bus = new EventBus();
 let save = loadSave();
 const spawnPoint = () => ({ x: home.x + 11, y: homeY + 1, z: home.z + 1.8 });
 const physics = new PhysicsWorld(world, spawnPoint().x, spawnPoint().z, obstacleSource);
@@ -187,6 +189,7 @@ function respawn(p: { x: number; y: number; z: number }) {
   lastSafe = { ...p };
   retCd = .6;
   audio.respawn();
+  bus.emit({ type: 'respawn' });
   particles.emit(p.x, p.y, p.z, 14, { color: '#9ff0ff', speed: 3, up: 3, size: 0.12 });
 }
 
@@ -270,6 +273,7 @@ function finishExpedition(tower: Tower) {
     menu.refresh();
   }
   endExpedition();
+  bus.emit({ type: 'expedition', id: tower.id, time, improved });
   audio.shard();
   hud.banner(tower.info.name, improved ? `새 기록 · ${formatRun(time)}` : `완주 ${formatRun(time)} · 최고 ${formatRun(best)}`, 2300);
   const { x, y, z } = physics.state;
@@ -293,6 +297,7 @@ function gainShard(id: string) {
   const n = save.shards.length;
   applyProgress();
   writeSave(save);
+  bus.emit({ type: 'shard', id, count: n });
   audio.shard();
   hud.banner(`별조각 ${n}/${SHARD_GOAL}`, n >= SHARD_GOAL ? '등대로 돌아가 불을 밝혀요' : '등대의 받침대 하나가 빛나기 시작해요', 3000);
   const s = physics.state;
@@ -423,6 +428,7 @@ function frame(now: number) {
       if (event === 'retry') { routeRespawn(final); hud.banner('다시 도전', '충격파를 뛰어넘고, 핵이 드러나면 내려찍어요.', 1800); }
       if (event === 'hit') { audio.slamImpact(.55); shakeAmt = Math.max(shakeAmt, .48); cube.flash = .55; }
       if (event === 'strike' || event === 'defeated') {
+        bus.emit({ type: event === 'strike' ? 'guardianStrike' : 'guardianDefeated' });
         audio.collect(1);
         particles.emit(s.x, s.y + 1, s.z, 32, { color: '#e0b4ff', speed: 6, up: 4, size: .17 });
         if (event === 'defeated') {
@@ -430,6 +436,14 @@ function frame(now: number) {
           hud.banner('폭풍 수호자를 쓰러뜨렸어요', '마지막 별조각을 가져가세요.', 2400);
         }
       }
+    }
+    if (alive) {
+      if (s.jumped) bus.emit({ type: 'jump' });
+      if (s.dashed) bus.emit({ type: 'dash' });
+      if (s.launched) bus.emit({ type: 'launch' });
+      if (s.slamLanded) bus.emit({ type: 'slam', power: THREE.MathUtils.clamp((s.slamFrom - s.y) / 14, 0, 1) });
+      if (s.landImpact > 0) bus.emit({ type: 'land', impact: s.landImpact, onPlatform: !!s.standingOn });
+      bus.emit({ type: 'tick', dt: FIXED_DT, moved: Math.hypot(s.x - s.px, s.z - s.pz), grounded: s.grounded, y: s.y, night: nightAmount() });
     }
     pressed = false;
     jumped ||= s.jumped; launched ||= s.launched; dashed ||= s.dashed;
@@ -470,6 +484,7 @@ function frame(now: number) {
     if (!t.expedition && ev.checkpoint && (!save.checkpoint || Math.hypot(save.checkpoint.x - ev.checkpoint.x, save.checkpoint.y - ev.checkpoint.y, save.checkpoint.z - ev.checkpoint.z) > 0.5)) {
       save.checkpoint = ev.checkpoint; writeSave(save);
       audio.checkpoint();
+      bus.emit({ type: 'checkpoint' });
       hud.banner('쉼터', '떨어져도 R을 누르면 여기로 돌아와요', 2200);
     }
     if (ev.shard && alive) {
@@ -494,6 +509,7 @@ function frame(now: number) {
       save.dust.push(d.id); writeSave(save);
       d.mesh.visible = false;
       hud.setGems(save.dust.length, dustTotal);
+      bus.emit({ type: 'dust', collected: save.dust.length, total: dustTotal });
       audio.collect(1);
       particles.emit(d.x, d.y, d.z, 10, { color: '#ffe27a', speed: 3, up: 2, size: 0.12 });
     }
@@ -502,6 +518,7 @@ function frame(now: number) {
   // 승리: 별조각을 다 모아 등대 앞에 서면
   if (save.shards.length >= SHARD_GOAL && !save.won && Math.hypot(s.x - home.x, s.z - home.z) < 9) {
     save.won = true; writeSave(save);
+    bus.emit({ type: 'victory' });
     audio.milestone();
     for (let k = 0; k < 6; k++) setTimeout(() => particles.emit(home.x + (Math.random() - 0.5) * 10, homeY + 14 + Math.random() * 6, home.z + (Math.random() - 0.5) * 10, 30, { color: ['#ffd36b', '#6fe3ff', '#ff6f9a'][k % 3], speed: 7, up: 4, size: 0.18, life: 1.6, gravity: 4 }), k * 350);
     document.exitPointerLock?.();
