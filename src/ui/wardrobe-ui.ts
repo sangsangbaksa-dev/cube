@@ -203,5 +203,3 @@ export function wardrobeUI(w: Wardrobe, opts: WardrobeUIOptions): {
   refresh();
   return { refresh, dialog, pulseCoins };
 }
-
-export { skinById };
