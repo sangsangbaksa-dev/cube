@@ -155,8 +155,9 @@
     @media (max-width: 680px) {
       .center { max-width: calc(100vw - 38px); top: calc(var(--top) + 39px); }
       .place { font-size: 16px; } .objective { font-size: 11px; }
-      .topright .chip { padding: 6px 8px; font-size: 11px; }
-      #minimap { top: calc(var(--top) + 108px); width: 84px; height: 84px; }
+      .topright { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 232px); }
+      .topright .chip { padding: 5px 7px; font-size: 10px; }
+      #minimap { top: calc(var(--top) + 112px); width: 84px; height: 84px; }
     }
   </style>
 </head>
@@ -186,6 +187,7 @@
   </dialog>
   <div class="topright">
     <button class="chip panel" id="homeBtn" type="button">돌아가기 (R)</button>
+    <button class="chip panel" id="viewBtn" type="button">3인칭 (V)</button>
     <button class="chip panel" id="timeBtn" type="button">밤 앞당기기 (T)</button>
     <button class="chip panel" id="muteBtn" type="button">소리 (M)</button>
   </div>
@@ -207,6 +209,7 @@
         <li class="kb"><b>클릭 · J</b><span>공중에서 내려찍기</span></li>
         <li class="kb"><b>Shift · 오른쪽 클릭</b><span>대시 (공중 한 번)</span></li>
         <li class="kb"><b>마우스 · Q/E</b><span>시점</span></li>
+        <li class="kb"><b>V</b><span>1인칭 / 3인칭 전환</span></li>
         <li class="kb"><b>R</b><span>마지막 쉼터로 돌아가기</span></li>
         <li class="kb"><b>P · L · O</b><span>원정 지도 · 업적 · 옷장</span></li>
         <li class="tc"><b>왼쪽 스틱</b><span>이동</span></li>

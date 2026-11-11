@@ -169,6 +169,27 @@ const normal = new THREE.Vector3();
 const nTmp = { x: 0, y: 1, z: 0 };
 const camTarget = new THREE.Vector3(physics.state.x, physics.state.y, physics.state.z);
 let camYaw = 0.72, camPitch = 0.24, shakeAmt = 0;
+// 1인칭 시점: V 키/버튼으로 전환. 3인칭과 달리 위를 올려다볼 수 있다.
+const VIEW_KEY = 'cubequest.view.v1';
+let firstPerson = false, fpPitch = 0;
+try { firstPerson = localStorage.getItem(VIEW_KEY) === 'fp'; } catch { /* 기본 3인칭 */ }
+const viewBtn = document.getElementById('viewBtn')!;
+function applyView() {
+  viewBtn.classList.toggle('on', firstPerson);
+  viewBtn.textContent = firstPerson ? '1인칭 (V)' : '3인칭 (V)';
+  camera.fov = firstPerson ? 78 : 62;
+  camera.updateProjectionMatrix();
+  if (!firstPerson) cube.group.visible = true;
+}
+function toggleView() {
+  firstPerson = !firstPerson;
+  if (firstPerson) fpPitch = 0.05;
+  try { localStorage.setItem(VIEW_KEY, firstPerson ? 'fp' : 'tp'); } catch { /* 이번 판만 */ }
+  applyView();
+}
+viewBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleView(); viewBtn.blur(); });
+addEventListener('keydown', (e) => { if (e.code === 'KeyV' && !e.repeat && started && !anyDialogOpen()) toggleView(); });
+applyView();
 let faceX = 0, faceZ = 1;
 let last = performance.now();
 let clock = 0.09; // 0~1 하루 (0.5가 한밤)
@@ -521,7 +542,8 @@ function frame(now: number) {
     inp.lookYaw = inp.lookPitch = 0; camYaw += rawDt * 0.1;
   }
   camYaw -= inp.lookYaw;
-  camPitch = THREE.MathUtils.clamp(camPitch + inp.lookPitch, 0.05, 1.25);
+  if (firstPerson && started) fpPitch = THREE.MathUtils.clamp(fpPitch + inp.lookPitch, -1.35, 1.35);
+  else camPitch = THREE.MathUtils.clamp(camPitch + inp.lookPitch, 0.05, 1.25);
   const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
   const moveX = fx * inp.moveY + rx * inp.moveX, moveZ = fz * inp.moveY + rz * inp.moveX;
   if (moveX * moveX + moveZ * moveZ > 0.01) { faceX = moveX; faceZ = moveZ; }
@@ -701,17 +723,31 @@ function frame(now: number) {
   camTarget.y += (pos.y - camTarget.y) * (s.y < camTarget.y - 6 ? k : ky);
   const inCave = Math.abs(s.x - cave.island.x) < 11 && s.z - cave.island.z > -18.8 && s.z - cave.island.z < 26;
   const dist = inCave ? 5.6 : 8;
-  const cp = Math.cos(camPitch);
-  camera.position.set(camTarget.x + Math.sin(camYaw) * cp * dist, camTarget.y + 1.2 + Math.sin(camPitch) * dist, camTarget.z + Math.cos(camYaw) * cp * dist);
-  const floor = world.height(camera.position.x, camera.position.z);
-  if (camera.position.y < floor + 0.8) camera.position.y = floor + 0.8;
-  if (shakeAmt > 0) {
-    camera.position.x += (Math.random() - 0.5) * shakeAmt;
-    camera.position.y += (Math.random() - 0.5) * shakeAmt;
-    shakeAmt = Math.max(0, shakeAmt - rawDt * 2.5);
+  const fp = firstPerson && started;
+  cube.group.visible = !fp;
+  if (fp) {
+    // 1인칭: 큐브 눈 높이에서 바라보는 방향 그대로 본다 (보간 위치를 써서 끊김 없이)
+    const cpf = Math.cos(fpPitch);
+    camera.position.set(pos.x, pos.y + 0.28, pos.z);
+    if (shakeAmt > 0) {
+      camera.position.x += (Math.random() - 0.5) * shakeAmt * .4;
+      camera.position.y += (Math.random() - 0.5) * shakeAmt * .4;
+      shakeAmt = Math.max(0, shakeAmt - rawDt * 2.5);
+    }
+    camera.lookAt(camera.position.x - Math.sin(camYaw) * cpf, camera.position.y - Math.sin(fpPitch), camera.position.z - Math.cos(camYaw) * cpf);
+  } else {
+    const cp = Math.cos(camPitch);
+    camera.position.set(camTarget.x + Math.sin(camYaw) * cp * dist, camTarget.y + 1.2 + Math.sin(camPitch) * dist, camTarget.z + Math.cos(camYaw) * cp * dist);
+    const floor = world.height(camera.position.x, camera.position.z);
+    if (camera.position.y < floor + 0.8) camera.position.y = floor + 0.8;
+    if (shakeAmt > 0) {
+      camera.position.x += (Math.random() - 0.5) * shakeAmt;
+      camera.position.y += (Math.random() - 0.5) * shakeAmt;
+      shakeAmt = Math.max(0, shakeAmt - rawDt * 2.5);
+    }
+    cameraOcclusion();
+    camera.lookAt(camTarget.x, camTarget.y + .8, camTarget.z);
   }
-  cameraOcclusion();
-  camera.lookAt(camTarget.x, camTarget.y + .8, camTarget.z);
   fog.near = 60 - night * 20; fog.far = 270 - night * 70;
   sky.update(camera, time, night, fog);
   minimap.update(s.x, s.z, faceX, faceZ, rawDt, towers);
