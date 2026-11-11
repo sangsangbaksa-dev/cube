@@ -30,6 +30,7 @@ import { GhostRecorder, GhostStore, ghostAt, type GhostTrack } from './game/ghos
 import { GhostCube } from './fx/ghost-render';
 import { MEDAL_INFO, medalFor, medalRank, parTimes } from './game/medals';
 import { resultsUI } from './ui/results-ui';
+import { Companion } from './fx/companion';
 
 // ---------- 장면 ----------
 const app = document.getElementById('app')!;
@@ -205,6 +206,8 @@ const dialogOpts = {
   onClose: () => input.clear(),
 };
 const results = resultsUI();
+const companion = new Companion();
+scene.add(companion.group);
 const wardrobe = new Wardrobe();
 const closet = wardrobeUI(wardrobe, {
   ...dialogOpts,
@@ -232,6 +235,7 @@ bus.on((e) => {
     achUI.toast(d);
     achUI.refresh();
     audio.achievement();
+    companion.cheer();
     earn(d.reward, `업적 · ${d.name}`);
   }
   const c = combo.handle(e);
@@ -371,6 +375,7 @@ function finishExpedition(tower: Tower) {
   }
   endExpedition();
   bus.emit({ type: 'expedition', id: tower.id, time, improved });
+  companion.cheer();
   audio.shard();
   results.show({
     course: tower.info.name, color: tower.info.color, time, best: improved ? time : best, improved, medal, newMedal, par,
@@ -663,6 +668,7 @@ function frame(now: number) {
     ghost.setPosition(ghostPos.x, ghostPos.y, ghostPos.z, s.vx, s.vz);
   } else ghost.setVisible(false);
   ghost.update(time);
+  companion.update(rawDt, pos, faceX, faceZ, time, night);
 
   // 등대: 별조각만큼 받침대가 빛나고, 다 모으면 빛기둥
   const n = save.shards.length;
