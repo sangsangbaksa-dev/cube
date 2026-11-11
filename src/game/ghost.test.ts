@@ -65,13 +65,13 @@ describe('GhostRecorder 샘플링', () => {
     expect(rec.finish().points).toEqual([]);
   });
 
-  it('최대 길이를 넘기면 저장소가 거부할 수 있게 한 칸 넘게 기록한다', () => {
+  it('최대 길이에서 멈추고 그 트랙은 저장된다', () => {
     const rec = new GhostRecorder();
     rec.start();
     for (let i = 0; i <= 6500; i++) rec.sample(i * GHOST_DT, 0, 0, 0);
     const track = rec.finish();
-    expect(track.points.length / 3).toBe(GHOST_MAX_SAMPLES + 1);
-    expect(new GhostStore(memoryStorage().storage).set('c1', track)).toBe(false);
+    expect(track.points.length / 3).toBe(GHOST_MAX_SAMPLES);
+    expect(new GhostStore(memoryStorage().storage).set('c1', track)).toBe(true);
   });
 });
 

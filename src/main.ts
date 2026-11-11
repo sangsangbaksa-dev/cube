@@ -84,6 +84,7 @@ const beacon = new THREE.Group();
   beacon.position.set(home.x, homeY, home.z);
   scene.add(beacon);
 }
+const LAMP_GOLD = new THREE.Color('#ffd36b');
 const lampMat = new THREE.MeshBasicMaterial({ color: '#ffd36b' });
 const lamp = new THREE.Mesh(new THREE.OctahedronGeometry(0.9, 1), lampMat);
 lamp.position.set(home.x, homeY + 12.4, home.z);
@@ -127,8 +128,12 @@ const obstacleSource = {
   },
 };
 
+// Ctrl/Cmd/Alt 조합은 브라우저 단축키(Ctrl+P, Ctrl+R …)이므로 게임 단축키로 보내지 않는다
+addEventListener('keydown', (e) => { if (e.ctrlKey || e.metaKey || e.altKey) e.stopImmediatePropagation(); }, true);
+
 // ---------- 진행 ----------
 const bus = new EventBus();
+const visitedRests = new Set<string>(); // 쉼터 왕복으로 보상을 반복해서 받지 못하게
 let save = loadSave();
 const spawnPoint = () => ({ x: home.x + 11, y: homeY + 1, z: home.z + 1.8 });
 const physics = new PhysicsWorld(world, spawnPoint().x, spawnPoint().z, obstacleSource);
@@ -165,6 +170,7 @@ let started = false;
 hud.onStart(() => {
   started = true;
   input.start();
+  input.consumeJump(); // Space로 시작할 때 첫 점프가 나가지 않게
   audio.unlock();
   window.focus();
   hud.banner('별빛 큐브', save.shards.length ? `별조각 ${save.shards.length}/${SHARD_GOAL} · 이어서 떠나요` : '등대 옆 돌길을 따라 초원 돌계단으로 떠나요', 3400);
@@ -211,6 +217,8 @@ let run: {
   running: boolean;
   elapsed: number;
   checkpoint: { x: number; y: number; z: number };
+  /** 체크포인트에 닿았을 때의 스위치 단계 (부활 시 복원) */
+  relayAt: number;
 } | null = null;
 const menu = expeditionMenu(expeditions, {
   canOpen: () => started && document.getElementById('victory')!.classList.contains('hidden') && !dialogs.some(d => d.open),
@@ -263,7 +271,9 @@ const quests = new Quests({ remainingDust: () => dustTotal - save.dust.length })
 const questPanel = questsUI(quests);
 const level = new Level();
 const levelHUD = levelUI(level);
-addEventListener('pagehide', () => { achievements.flush(); quests.flush(); level.flush(); });
+const flushAll = () => { achievements.flush(); quests.flush(); level.flush(); };
+addEventListener('pagehide', flushAll);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushAll(); });
 bus.on((e) => {
   const xpBefore = level.total;
   for (const up of level.handle(e)) {
@@ -362,7 +372,7 @@ function beginExpedition(tower: Tower, travel: boolean) {
   if (rush.state === 'running') rush.cancel();
   const [start, next] = tower.course.platforms;
   const checkpoint = { x: start.x, y: start.y + .57, z: start.z };
-  run = { tower, arrived: !travel, running: false, elapsed: 0, checkpoint };
+  run = { tower, arrived: !travel, running: false, elapsed: 0, checkpoint, relayAt: 0 };
   if (travel) {
     respawn(checkpoint);
     camYaw = Math.atan2(start.x - next.x, start.z - next.z);
@@ -382,9 +392,10 @@ function endExpedition() {
 function retryExpedition() {
   if (!run) return;
   run.tower.mechanisms?.reset();
+  run.tower.setRelay(run.relayAt);
   respawn(run.checkpoint);
   // 시작점으로 돌아가면 기록·고스트를 처음부터
-  if (run.checkpoint.x === run.tower.course.platforms[0].x && run.checkpoint.z === run.tower.course.platforms[0].z) { run.running = false; run.elapsed = 0; }
+  if (run.checkpoint.x === run.tower.course.platforms[0].x && run.checkpoint.z === run.tower.course.platforms[0].z) { run.running = false; run.elapsed = 0; hud.setTrial('출발 발판을 벗어나면 기록 시작'); }
 }
 
 function tickExpedition(s: typeof physics.state) {
@@ -415,6 +426,7 @@ function tickExpedition(s: typeof physics.state) {
   const checkpoint = tower.plats.find(p => p.ob === s.standingOn && p.spec.kind === 'checkpoint')?.spec;
   if (checkpoint && (checkpoint.x !== run.checkpoint.x || checkpoint.z !== run.checkpoint.z)) {
     run.checkpoint = { x: checkpoint.x, y: checkpoint.y + .57, z: checkpoint.z };
+    run.relayAt = tower.relayStage;
     audio.checkpoint();
   }
   if (tower.takeRelay(s)) audio.checkpoint();
@@ -621,7 +633,7 @@ function frame(now: number) {
       if (s.dashed) bus.emit({ type: 'dash' });
       if (s.launched) bus.emit({ type: 'launch' });
       if (s.slamLanded) bus.emit({ type: 'slam', power: THREE.MathUtils.clamp((s.slamFrom - s.y) / 14, 0, 1) });
-      if (s.landImpact > 0) bus.emit({ type: 'land', impact: s.landImpact, onPlatform: !!s.standingOn });
+      if (s.landImpact > 1.5 && retCd <= 0) bus.emit({ type: 'land', impact: s.landImpact, onPlatform: !!s.standingOn });
       bus.emit({ type: 'tick', dt: FIXED_DT, moved: Math.hypot(s.x - s.px, s.z - s.pz), grounded: s.grounded, y: s.y, night: nightAmount() });
     }
     if (alive) {
@@ -696,7 +708,8 @@ function frame(now: number) {
     if (!t.expedition && ev.checkpoint && (!save.checkpoint || Math.hypot(save.checkpoint.x - ev.checkpoint.x, save.checkpoint.y - ev.checkpoint.y, save.checkpoint.z - ev.checkpoint.z) > 0.5)) {
       save.checkpoint = ev.checkpoint; writeSave(save);
       audio.checkpoint();
-      bus.emit({ type: 'checkpoint' });
+      const cpKey = `${Math.round(ev.checkpoint.x)},${Math.round(ev.checkpoint.z)}`;
+      if (!visitedRests.has(cpKey)) { visitedRests.add(cpKey); bus.emit({ type: 'checkpoint' }); }
       hud.banner('쉼터', '떨어져도 R을 누르면 여기로 돌아와요', 2200);
     }
     if (ev.shard && alive) {
@@ -775,7 +788,7 @@ function frame(now: number) {
   // 등대: 별조각만큼 받침대가 빛나고, 다 모으면 빛기둥
   const n = save.shards.length;
   sockets.forEach((so, k) => { (so.material as THREE.MeshLambertMaterial).emissiveIntensity = k < n ? 1.2 + 0.3 * Math.sin(time * 3 + k) : 0; so.rotation.y = time + k; });
-  lampMat.color.set(n >= SHARD_GOAL ? '#fff2b8' : '#7a6a4a').lerp(new THREE.Color('#ffd36b'), n / SHARD_GOAL);
+  lampMat.color.set(n >= SHARD_GOAL ? '#fff2b8' : '#7a6a4a').lerp(LAMP_GOLD, n / SHARD_GOAL);
   lampLight.intensity = (n / SHARD_GOAL) * 40 + 3;
   (lampBeam.material as THREE.MeshBasicMaterial).opacity = save.won ? 0.22 + 0.05 * Math.sin(time * 2) : 0;
   lamp.rotation.y = time * 0.8;

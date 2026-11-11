@@ -68,9 +68,9 @@ export class GhostRecorder {
     return this.points.length / 3;
   }
 
-  // 최대치를 한 칸 넘으면 더 쌓지 않는다. 넘긴 트랙은 저장 단계에서 거부된다.
+  // 최대치에 닿으면 더 쌓지 않는다.
   private push(x: number, y: number, z: number) {
-    if (this.count() > GHOST_MAX_SAMPLES) return;
+    if (this.count() >= GHOST_MAX_SAMPLES) return;
     this.points.push(round2(x), round2(y), round2(z));
   }
 }

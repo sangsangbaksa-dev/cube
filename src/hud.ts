@@ -64,7 +64,10 @@ export const hud = {
   },
   onReset(show: boolean, cb: () => void) {
     $('resetBtn').hidden = !show;
-    $('resetBtn').addEventListener('click', (e) => { e.stopPropagation(); cb(); });
+    $('resetBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm('별조각, 원정 기록, 고스트가 모두 지워져요. 처음부터 다시 할까요?')) cb();
+    });
   },
   onStart(cb: () => void) {
     let done = false;

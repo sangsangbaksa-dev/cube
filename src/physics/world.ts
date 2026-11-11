@@ -203,6 +203,8 @@ export class PhysicsWorld {
     s.coyote = s.buffer = s.dashCd = 0;
     s.airDashUsed = s.noCut = false;
     s.standingOn = null;
+    // 같은 스텝에서 난 착지·점프 효과가 부활 지점에서 재생되지 않게 비운다
+    s.landImpact = 0; s.slamLanded = s.jumped = s.launched = s.dashed = false;
   }
 
   /**

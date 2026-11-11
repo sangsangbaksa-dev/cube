@@ -20,6 +20,7 @@ export class Input {
   private stick = { x: 0, y: 0 };
   private look = { yaw: 0, pitch: 0 };
   private active = false;
+  private lastRead = performance.now();
   private lastPointerType = '';
   readonly isTouch: boolean;
 
@@ -29,8 +30,8 @@ export class Input {
     addEventListener('keydown', (e) => {
       if (document.querySelector('dialog[open]')) return;
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+      this.keys.add(e.code); // 자동반복에서도 추가: 다이얼로그가 키 상태를 비워도 누르고 있던 키가 복구된다
       if (e.repeat) return;
-      this.keys.add(e.code);
       if (e.code === 'Space') this.jumpQueued = true;
       if (e.code === 'KeyJ' || e.code === 'KeyF') this.attackQueued = true;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyK') this.dashQueued = true;
@@ -220,9 +221,12 @@ export class Input {
     const len = Math.hypot(x, y);
     if (len > 1) { x /= len; y /= len; }
     const yawKeys = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
+    const now = performance.now();
+    const dt = Math.min(0.1, Math.max(0, (now - this.lastRead) / 1000)); // 주사율과 무관하게 초당 2.4rad
+    this.lastRead = now;
     const frame: InputFrame = {
       moveX: x, moveY: y,
-      lookYaw: this.look.yaw + yawKeys * 0.04,
+      lookYaw: this.look.yaw + yawKeys * 2.4 * dt,
       lookPitch: this.look.pitch,
     };
     this.look.yaw = 0;

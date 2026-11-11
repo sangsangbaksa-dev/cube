@@ -44,5 +44,5 @@ export function writeSave(d: SaveData) {
 }
 
 export function clearSave() {
-  try { localStorage.removeItem(KEY); } catch { /* 무시 */ }
+  try { localStorage.removeItem(KEY); localStorage.removeItem('cubequest.ghost.v1'); } catch { /* 무시 */ }
 }

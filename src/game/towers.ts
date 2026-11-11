@@ -173,6 +173,9 @@ export class Tower {
     this.mechanisms?.reset();
   }
 
+  /** 체크포인트로 부활할 때 그 시점의 스위치 단계로 되돌린다 */
+  setRelay(n: number) { this.relay = Math.max(0, Math.min(this.relayCount, n)); }
+
   takeRelay(st: PhysicsState) {
     const pad = this.plats.find(p => p.ob === st.standingOn && p.spec.relay === this.relay + 1);
     if (!pad) return false;

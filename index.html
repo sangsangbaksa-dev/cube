@@ -155,6 +155,7 @@
     .atkbtn { right: max(122px, calc(env(safe-area-inset-right, 0px) + 100px)); bottom: max(26px, env(safe-area-inset-bottom, 0px)); width: 74px; height: 74px; font-size: 18px; background: rgba(255, 111, 154, .6); }
     .divebtn { right: max(40px, env(safe-area-inset-right, 0px)); bottom: max(134px, calc(env(safe-area-inset-bottom, 0px) + 120px)); width: 62px; height: 62px; font-size: 15px; background: rgba(162, 107, 255, .6); }
     .jumpbtn:active, .atkbtn:active, .divebtn:active { filter: brightness(1.3); transform: scale(.95); }
+    @media (max-height: 500px) { .qst-panel, .ch-panel { display: none; } }
     @media (max-width: 680px) {
       .center { max-width: calc(100vw - 38px); top: calc(var(--top) + 39px); }
       .place { font-size: 16px; } .objective { font-size: 11px; }
