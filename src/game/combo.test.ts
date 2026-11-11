@@ -129,15 +129,15 @@ describe('땅 위 종료 (0.9초)', () => {
     expect(c.score).toBe(0);
   });
 
-  it(`기준은 ${GROUND_LIMIT}초이고, 그 전에 뛰면 이어진다`, () => {
+  it(`땅에 내려앉은 뒤 ${GROUND_LIMIT}초 안에 다시 뛰면 콤보는 끝나고 새로 시작한다`, () => {
     const c = new Combo(memory().storage);
     c.handle(jump);
     c.handle(dash);
     c.handle(landGround);
     c.handle(tick(0.5, true));
     c.handle(tick(0.375, true));
-    expect(c.handle(jump)).toMatchObject({ kind: 'grow', chain: 3 });
-    expect(c.chain).toBe(3);
+    expect(c.handle(jump)).toMatchObject({ kind: 'end', chain: 2 });
+    expect(c.chain).toBe(1);
   });
 
   it('공중에 뜬 tick은 땅 타이머를 0으로 되돌린다', () => {
@@ -334,5 +334,27 @@ describe('end 이벤트와 최고 기록', () => {
     c.handle(landGround);
     expect(c.handle(tick(0.9, true))).toMatchObject({ kind: 'end', newBest: true, score: 35 });
     expect(c.best).toBe(35);
+  });
+});
+
+describe('제자리 뛰기', () => {
+  it('땅에서 연달아 뛰어도 콤보가 쌓이지 않는다', () => {
+    const c = new Combo({ get: () => null, set: () => {} });
+    let shown = 0;
+    for (let i = 0; i < 20; i++) {
+      if (c.handle({ type: 'jump' })) shown++;
+      c.handle({ type: 'tick', dt: 1 / 60, moved: 0, grounded: false, y: 1, night: 0 });
+      c.handle({ type: 'land', impact: 5, onPlatform: false });
+    }
+    expect(shown).toBe(0);
+    expect(c.chain).toBeLessThanOrEqual(1);
+  });
+  it('발판 착지 뒤 점프는 콤보를 잇는다', () => {
+    const c = new Combo({ get: () => null, set: () => {} });
+    c.handle({ type: 'jump' });
+    c.handle({ type: 'land', impact: 5, onPlatform: true });
+    const ev = c.handle({ type: 'jump' });
+    expect(ev?.kind).toBe('grow');
+    expect(c.chain).toBe(3);
   });
 });

@@ -60,6 +60,7 @@ export class Combo {
   private grounded = false;
   private groundTime = 0;
   private groundLimit = GROUND_LIMIT;
+  private onTerrain = false;
   private tierAt = -1;
   private _best: number;
   private readonly storage: ComboStorage;
@@ -77,12 +78,20 @@ export class Combo {
 
   handle(e: GameEvent): ComboEvent | null {
     switch (e.type) {
-      case 'jump': return this.add(10);
+      case 'jump': {
+        // 그냥 땅에서 뛰면 콤보를 잇지 않고 새로 시작한다(제자리 뛰기로 점수 쌓기 방지)
+        if (this.grounded && this.onTerrain && this._chain > 0) {
+          const ended = this.finish();
+          this.add(10);
+          return ended;
+        }
+        return this.add(10);
+      }
       case 'dash': return this.add(25);
       case 'slam': return this.add(Math.round(40 + clamp01(e.power) * 40));
       case 'launch': return this.add(30);
       case 'land': {
-        if (!e.onPlatform) { this.touchGround(GROUND_LIMIT); return null; }
+        if (!e.onPlatform) { this.touchGround(GROUND_LIMIT); this.onTerrain = true; return null; }
         const ev = this.add(15);
         this.touchGround(PLATFORM_GRACE);
         return ev;
@@ -112,6 +121,7 @@ export class Combo {
   }
 
   private leaveGround() {
+    this.onTerrain = false;
     this.grounded = false;
     this.groundTime = 0;
   }
@@ -120,7 +130,7 @@ export class Combo {
     if (!grounded) { this.leaveGround(); return null; }
     if (this._chain === 0) return null;
     // 착지 이벤트 없이 땅에 닿은 경우는 일반 땅 기준으로 센다
-    if (!this.grounded) this.touchGround(GROUND_LIMIT);
+    if (!this.grounded) { this.touchGround(GROUND_LIMIT); this.onTerrain = true; }
     if (Number.isFinite(dt) && dt > 0) this.groundTime += dt;
     if (this.groundTime < this.groundLimit) return null;
     return this.finish();
