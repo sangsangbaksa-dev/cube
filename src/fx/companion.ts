@@ -148,13 +148,13 @@ export class Companion {
 
     // 가산 혼합 후광 (작은 구)
     this.glowMat = new THREE.MeshBasicMaterial({
-      color: '#fff3b0',
+      color: '#ffd36b',
       transparent: true,
       opacity: 0.3,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
-    this.group.add(new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 12), this.glowMat));
+    this.group.add(new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), this.glowMat));
 
     // 밤길을 밝히는 빛 (밤일수록 강해짐)
     this.light = new THREE.PointLight('#ffd98a', 0, 7);
@@ -202,7 +202,7 @@ export class Companion {
     this.spinner.rotation.y = this.spin + extraSpin;
 
     // 밤에 더 진해지는 후광과 빛
-    this.glowMat.opacity = (0.2 + 0.1 * Math.sin(time * 3)) * (0.35 + 0.65 * n);
+    this.glowMat.opacity = (0.09 + 0.04 * Math.sin(time * 3)) * (0.5 + 0.5 * n);
     this.light.intensity = 6 * n;
   }
 

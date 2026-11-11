@@ -31,6 +31,8 @@ import { GhostCube } from './fx/ghost-render';
 import { MEDAL_INFO, medalFor, medalRank, parTimes } from './game/medals';
 import { resultsUI } from './ui/results-ui';
 import { Companion } from './fx/companion';
+import { Level } from './game/level';
+import { levelUI } from './ui/level-ui';
 
 // ---------- 장면 ----------
 const app = document.getElementById('app')!;
@@ -229,8 +231,18 @@ const combo = new Combo();
 const comboView = comboUI();
 const quests = new Quests({ remainingDust: () => dustTotal - save.dust.length });
 const questPanel = questsUI(quests);
-addEventListener('pagehide', () => { achievements.flush(); quests.flush(); });
+const level = new Level();
+const levelHUD = levelUI(level);
+addEventListener('pagehide', () => { achievements.flush(); quests.flush(); level.flush(); });
 bus.on((e) => {
+  const xpBefore = level.total;
+  for (const up of level.handle(e)) {
+    levelHUD.levelUp(up);
+    audio.milestone();
+    companion.cheer();
+    earn(up.coins, `레벨 ${up.level}`);
+  }
+  if (level.total > xpBefore) levelHUD.gain(level.total - xpBefore);
   for (const d of achievements.handle(e)) {
     achUI.toast(d);
     achUI.refresh();
