@@ -31,6 +31,15 @@ import { GhostCube } from './fx/ghost-render';
 import { MEDAL_INFO, medalFor, medalRank, parTimes } from './game/medals';
 import { resultsUI } from './ui/results-ui';
 import { Companion } from './fx/companion';
+import { Chests, hintFor, placeChests } from './game/chests';
+import { ChestRender } from './fx/chest-render';
+import { chestUI } from './ui/chest-ui';
+import { Wisps } from './game/wisps';
+import { WispRender } from './fx/wisp-render';
+import { codexUI } from './ui/codex-ui';
+import { OrbRush } from './game/orbrush';
+import { OrbRushRender } from './fx/orbrush-render';
+import { orbRushUI } from './ui/orbrush-ui';
 import { Level } from './game/level';
 import { levelUI } from './ui/level-ui';
 
@@ -292,6 +301,32 @@ const meteors = new MeteorShower({ height: (x, z) => world.height(x, z) });
 const meteorRender = new MeteorRender();
 scene.add(meteorRender.group);
 
+// 보물 상자, 정령 도감, 빛구슬 질주
+const chestSpecs = placeChests({ height: (x, z) => world.height(x, z), sites: world.sites });
+const chests = new Chests(chestSpecs);
+const chestRender = new ChestRender(chestSpecs);
+scene.add(chestRender.group);
+const chestHud = chestUI();
+chestHud.setCount(chests.openedCount, chests.total);
+let chestHintT = 0;
+const wisps = new Wisps({ height: (x, z) => world.height(x, z) });
+const wispRender = new WispRender();
+scene.add(wispRender.group);
+const codex = codexUI(wisps, dialogOpts);
+dialogs.push(codex.dialog);
+const rush = new OrbRush({ height: (x, z) => world.height(x, z) });
+const rushRender = new OrbRushRender();
+scene.add(rushRender.group);
+const rushHud = orbRushUI();
+function toggleRush() {
+  if (!started || anyDialogOpen() || guardian.active || run) return;
+  if (rush.state === 'running') { rush.cancel(); hud.banner('빛구슬 질주', '그만두었어요', 1400); return; }
+  rush.start({ x: physics.state.x, z: physics.state.z });
+  audio.ghostStart();
+}
+addEventListener('keydown', (e) => { if (e.code === 'KeyB' && !e.repeat) toggleRush(); });
+document.getElementById('rushBtn')!.addEventListener('click', (e) => { e.stopPropagation(); toggleRush(); });
+
 const ghostStore = new GhostStore();
 const recorder = new GhostRecorder();
 const ghost = new GhostCube();
@@ -324,6 +359,7 @@ function routeRespawn(t: Tower, preferStart = false) {
 
 function beginExpedition(tower: Tower, travel: boolean) {
   endExpedition();
+  if (rush.state === 'running') rush.cancel();
   const [start, next] = tower.course.platforms;
   const checkpoint = { x: start.x, y: start.y + .57, z: start.z };
   run = { tower, arrived: !travel, running: false, elapsed: 0, checkpoint };
@@ -599,6 +635,28 @@ function frame(now: number) {
         }
       }
     }
+    if (alive) {
+      for (const ev of chests.step(s)) {
+        earn(ev.coins, '보물 상자');
+        chestHud.popup(ev.coins, ev.spec.tier);
+        chestHud.setCount(chests.openedCount, chests.total);
+        audio.collect(1);
+        companion.cheer();
+        particles.emit(ev.spec.x, ev.spec.y + .6, ev.spec.z, 24, { color: '#ffd36b', speed: 4, up: 5, size: .13 });
+      }
+      for (const ev of wisps.step(FIXED_DT, s, nightAmount())) {
+        if (ev.kind !== 'catch') continue;
+        earn(ev.coins, `정령 · ${ev.wisp.species.name}`);
+        codex.toast(ev.wisp.species, ev.firstTime);
+        codex.refresh();
+        particles.emit(ev.wisp.x, ev.wisp.y, ev.wisp.z, 18, { color: ev.wisp.species.color, speed: 3, up: 3, size: .12 });
+      }
+      for (const ev of rush.step(FIXED_DT, s)) {
+        rushHud.announce(ev);
+        if (ev.kind === 'collect' || ev.kind === 'time') audio.coin();
+        else if (ev.kind === 'end') { earn(ev.coins, '빛구슬 질주'); audio.achievement(); }
+      }
+    }
     pressed = false;
     jumped ||= s.jumped; launched ||= s.launched; dashed ||= s.dashed;
     landImpact = Math.max(landImpact, s.landImpact);
@@ -696,6 +754,16 @@ function frame(now: number) {
   cube.shadow.visible = true;
   particles.update(rawDt);
   meteorRender.sync(meteors.meteors, time);
+  chestRender.sync(chests.list(), time, night);
+  wispRender.sync(wisps.active, time);
+  rushRender.sync(rush, time);
+  rushHud.show(rush);
+  chestHintT -= rawDt;
+  if (chestHintT <= 0) {
+    chestHintT = 0.5;
+    const near = chests.nearest(s);
+    chestHud.setHint(near && near.dist < 60 ? hintFor(s, near.spec) : null);
+  }
   comboView.update(rawDt);
   if (run?.running && ghostTrack && ghostAt(ghostTrack, run.elapsed, ghostPos)) {
     ghost.setVisible(true);

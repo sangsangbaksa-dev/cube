@@ -52,6 +52,9 @@
     .chip { padding: 7px 11px; font-size: 12px; border-radius: 10px; }
     .chip.on { color: var(--gold); border-color: rgba(255, 211, 107, .5); }
     .expedition-toggle { position: fixed; left: var(--left); bottom: var(--bottom); z-index: 5; color: #f4dec5; }
+    .rush-toggle { position: fixed; left: var(--left); bottom: calc(var(--bottom) + 176px); z-index: 5; color: #bfeaff; }
+    .touch .rush-toggle { bottom: calc(var(--bottom) + 321px); }
+    body:not(.started) .rush-toggle { visibility: hidden; }
     body:not(.started) .expedition-toggle { visibility: hidden; }
     .touch .expedition-toggle { bottom: calc(var(--bottom) + 147px); }
     .trial { padding: 4px 9px; color: #e7c9a6; font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -173,6 +176,7 @@
     <div class="objective panel" id="objective" hidden></div>
     <div class="trial panel" id="trial" hidden></div>
   </div>
+  <button class="rush-toggle chip panel" id="rushBtn" type="button" aria-keyshortcuts="B">빛구슬 질주 (B)</button>
   <button class="expedition-toggle chip panel" id="expeditionBtn" type="button" aria-keyshortcuts="P" aria-haspopup="dialog">원정 지도</button>
   <dialog class="expedition-dialog" id="expeditionDialog" aria-labelledby="expeditionTitle">
     <header class="expedition-head">
@@ -210,6 +214,7 @@
         <li class="kb"><b>Shift · 오른쪽 클릭</b><span>대시 (공중 한 번)</span></li>
         <li class="kb"><b>마우스 · Q/E</b><span>시점</span></li>
         <li class="kb"><b>V</b><span>1인칭 / 3인칭 전환</span></li>
+        <li class="kb"><b>B · G</b><span>빛구슬 질주 · 정령 도감</span></li>
         <li class="kb"><b>R</b><span>마지막 쉼터로 돌아가기</span></li>
         <li class="kb"><b>P · L · O</b><span>원정 지도 · 업적 · 옷장</span></li>
         <li class="tc"><b>왼쪽 스틱</b><span>이동</span></li>
