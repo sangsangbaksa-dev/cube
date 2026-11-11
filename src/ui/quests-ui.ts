@@ -31,6 +31,7 @@ body:not(.started) .qst-panel { visibility: hidden; }
   40% { background: #ffd36b33; box-shadow: inset 0 0 0 1px #ffd36b; }
   100% { background: transparent; }
 }
+@media (max-width: 680px) { .qst-panel { top: calc(var(--top, 12px) + 132px); } }
 @media (max-width: 500px) {
   .qst-panel { width: 180px; font-size: 11px; }
   .qst-head { font-size: 11px; }

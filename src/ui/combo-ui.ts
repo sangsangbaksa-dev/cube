@@ -8,7 +8,7 @@ const HOLD_BROKEN = 0.7, FADE_BROKEN = 0.45;
 type Mode = 'idle' | 'live' | 'end' | 'broken';
 
 const CSS = `
-.${P} { position: fixed; top: 42%; right: var(--right, 14px); transform: translateY(-50%); z-index: 20;
+.${P} { position: fixed; top: 42%; right: var(--right, 14px); transform: translateY(-50%); z-index: 4;
   pointer-events: none; text-align: right; color: var(--ink, #eef0ff); font-family: var(--body, system-ui);
   text-shadow: 0 2px 10px rgba(10, 6, 30, .85); }
 .${P}[data-mode="idle"] { visibility: hidden; opacity: 0; }

@@ -16,6 +16,18 @@ import { FALL_Y, World } from './world/terrain';
 import { buildWorld, Sky } from './world/render';
 import { Minimap } from './minimap';
 import { EventBus } from './game/events';
+import { Achievements } from './game/achievements';
+import { achievementsUI } from './ui/achievements-ui';
+import { Combo } from './game/combo';
+import { comboUI } from './ui/combo-ui';
+import { Quests } from './game/quests';
+import { questsUI } from './ui/quests-ui';
+import { Wardrobe } from './game/wardrobe';
+import { wardrobeUI } from './ui/wardrobe-ui';
+import { MeteorShower } from './game/meteors';
+import { MeteorRender } from './fx/meteor-render';
+import { GhostRecorder, GhostStore, ghostAt, type GhostTrack } from './game/ghost';
+import { GhostCube } from './fx/ghost-render';
 
 // ---------- 장면 ----------
 const app = document.getElementById('app')!;
@@ -166,7 +178,7 @@ let run: {
   checkpoint: { x: number; y: number; z: number };
 } | null = null;
 const menu = expeditionMenu(expeditions, {
-  canOpen: () => started && document.getElementById('victory')!.classList.contains('hidden'),
+  canOpen: () => started && document.getElementById('victory')!.classList.contains('hidden') && !dialogs.some(d => d.open),
   records: () => save.records,
   onOpen: () => { input.clear(); document.exitPointerLock?.(); },
   onClose: () => input.clear(),
@@ -180,6 +192,73 @@ const menu = expeditionMenu(expeditions, {
     respawn(spawnPoint());
   },
 });
+
+// ---------- 게임 시스템: 업적, 콤보, 의뢰, 옷장, 별똥별, 고스트 ----------
+const victoryHidden = () => document.getElementById('victory')!.classList.contains('hidden');
+const dialogs: HTMLDialogElement[] = [menu.dialog];
+const anyDialogOpen = () => dialogs.some(d => d.open);
+const dialogOpts = {
+  canOpen: () => started && victoryHidden() && !anyDialogOpen(),
+  onOpen: () => { input.clear(); document.exitPointerLock?.(); },
+  onClose: () => input.clear(),
+};
+const wardrobe = new Wardrobe();
+const closet = wardrobeUI(wardrobe, {
+  ...dialogOpts,
+  onEquip: (skin) => { cube.setSkin(skin); audio.purchase(); },
+});
+dialogs.push(closet.dialog);
+cube.setSkin(wardrobe.equipped);
+function earn(n: number, reason: string) {
+  if (n <= 0) return;
+  wardrobe.earn(n, reason);
+  closet.refresh();
+  closet.pulseCoins();
+  audio.coin();
+}
+const achievements = new Achievements();
+const achUI = achievementsUI(achievements, dialogOpts);
+dialogs.push(achUI.dialog);
+const combo = new Combo();
+const comboView = comboUI();
+const quests = new Quests({ remainingDust: () => dustTotal - save.dust.length });
+const questPanel = questsUI(quests);
+addEventListener('pagehide', () => { achievements.flush(); quests.flush(); });
+bus.on((e) => {
+  for (const d of achievements.handle(e)) {
+    achUI.toast(d);
+    achUI.refresh();
+    audio.achievement();
+    earn(d.reward, `업적 · ${d.name}`);
+  }
+  const c = combo.handle(e);
+  if (c) {
+    comboView.show(c);
+    if (c.kind === 'grow') audio.comboTick(c.chain);
+    else if (c.kind === 'broken') audio.comboBreak();
+    else { audio.comboEnd(c.score, c.newBest); earn(c.coins, '공중 콤보'); }
+  }
+  const finished = quests.handle(e);
+  if (finished.length) {
+    for (const q of finished) { questPanel.flash(q); earn(q.reward, `의뢰 · ${q.title}`); }
+    audio.questDone();
+    const bonus = quests.takeBonus();
+    if (bonus) { earn(bonus, '오늘의 의뢰 보너스'); hud.banner('오늘의 의뢰 완료', `보너스 반짝이 +${bonus}`, 2400); }
+  }
+  if (e.type !== 'tick') questPanel.refresh();
+});
+
+const meteors = new MeteorShower({ height: (x, z) => world.height(x, z) });
+const meteorRender = new MeteorRender();
+scene.add(meteorRender.group);
+
+const ghostStore = new GhostStore();
+const recorder = new GhostRecorder();
+const ghost = new GhostCube();
+ghost.setVisible(false);
+scene.add(ghost.group);
+const ghostPos = { x: 0, y: 0, z: 0 };
+let ghostTrack: GhostTrack | null = null;
 
 function nightAmount() { return 0.5 - 0.5 * Math.cos(clock * Math.PI * 2); }
 
@@ -218,6 +297,7 @@ function beginExpedition(tower: Tower, travel: boolean) {
 }
 
 function endExpedition() {
+  ghostTrack = null;
   run?.tower.resetExpedition();
   run = null;
   hud.setTrial('');
@@ -227,6 +307,8 @@ function retryExpedition() {
   if (!run) return;
   run.tower.mechanisms?.reset();
   respawn(run.checkpoint);
+  // 시작점으로 돌아가면 기록·고스트를 처음부터
+  if (run.checkpoint.x === run.tower.course.platforms[0].x && run.checkpoint.z === run.tower.course.platforms[0].z) { run.running = false; run.elapsed = 0; }
 }
 
 function tickExpedition(s: typeof physics.state) {
@@ -244,9 +326,15 @@ function tickExpedition(s: typeof physics.state) {
   const onStart = s.standingOn === tower.plats[0].ob;
   run.arrived ||= onStart;
   if (!run.arrived) return;
-  run.running ||= !onStart;
+  if (!run.running && !onStart) {
+    run.running = true;
+    recorder.start();
+    ghostTrack = ghostStore.get(tower.id);
+    if (ghostTrack) audio.ghostStart();
+  }
   if (!run.running) return;
   run.elapsed += FIXED_DT;
+  recorder.sample(run.elapsed, s.x, s.y, s.z);
 
   const checkpoint = tower.plats.find(p => p.ob === s.standingOn && p.spec.kind === 'checkpoint')?.spec;
   if (checkpoint && (checkpoint.x !== run.checkpoint.x || checkpoint.z !== run.checkpoint.z)) {
@@ -266,7 +354,9 @@ function finishExpedition(tower: Tower) {
   const time = run.elapsed;
   const best = save.records[tower.id];
   const improved = best === undefined || time < best;
+  const track = recorder.finish();
   if (improved) {
+    ghostStore.set(tower.id, track);
     save.records[tower.id] = time;
     writeSave(save);
     tower.setCollected(true);
@@ -282,7 +372,7 @@ function finishExpedition(tower: Tower) {
 
 /** R: 마지막 쉼터(없으면 등대)로 돌아간다 */
 function returnToCheckpoint() {
-  if (!started || retCd > 0 || menu.dialog.open) return;
+  if (!started || retCd > 0 || anyDialogOpen()) return;
   if (run) retryExpedition();
   else if (guardian.active) { guardian.reset(); routeRespawn(final); }
   else respawn(save.checkpoint ?? spawnPoint());
@@ -389,11 +479,11 @@ function frame(now: number) {
     prTimer = 0;
     if (emaDt > 1 / 28 && pixelRatio > 0.75) { pixelRatio = Math.max(0.75, pixelRatio - 0.25); renderer.setPixelRatio(pixelRatio); resize(); }
   }
-  const dt = menu.dialog.open ? 0 : rawDt;
+  const dt = anyDialogOpen() ? 0 : rawDt;
   const inp = input.read();
   const { steps, alpha } = stepper.advance(dt);
   let attack = steps > 0 && input.consumeAttack(), dash = steps > 0 && input.consumeDash();
-  const alive = started && !menu.dialog.open;
+  const alive = started && !anyDialogOpen();
   if (!alive) {
     input.consumeJump(); attack = dash = false;
     inp.moveX = inp.moveY = 0;
@@ -445,6 +535,17 @@ function frame(now: number) {
       if (s.landImpact > 0) bus.emit({ type: 'land', impact: s.landImpact, onPlatform: !!s.standingOn });
       bus.emit({ type: 'tick', dt: FIXED_DT, moved: Math.hypot(s.x - s.px, s.z - s.pz), grounded: s.grounded, y: s.y, night: nightAmount() });
     }
+    if (alive) {
+      for (const m of meteors.step(FIXED_DT, s, nightAmount())) {
+        if (m.kind === 'spawn') audio.meteorFall();
+        else if (m.kind === 'impact') { audio.meteorImpact(); particles.emit(m.meteor.x, m.meteor.y, m.meteor.z, 22, { color: '#ffe9a0', speed: 5, up: 4, size: .14 }); }
+        else if (m.kind === 'collect') {
+          earn(m.coins, '별똥 조각');
+          hud.banner('별똥 조각', `반짝이 +${m.coins}`, 1600);
+          particles.emit(m.meteor.x, m.meteor.y, m.meteor.z, 26, { color: '#ffd36b', speed: 4, up: 4, size: .13 });
+        }
+      }
+    }
     pressed = false;
     jumped ||= s.jumped; launched ||= s.launched; dashed ||= s.dashed;
     landImpact = Math.max(landImpact, s.landImpact);
@@ -454,7 +555,7 @@ function frame(now: number) {
   const feetY = s.groundY + 0.1;
   if (jumped) { cube.kickJump(); audio.jump(); particles.emit(s.x, feetY, s.z, 5, { color: '#d8d0ff', speed: 1.6, up: 2, size: 0.1 }); }
   if (launched) audio.launch();
-  if (dashed) { audio.dash(); particles.emit(s.x, s.y, s.z, 8, { color: '#9ff0ff', speed: 2, up: 0.5, size: 0.12, gravity: 0 }); }
+  if (dashed) { audio.dash(); particles.emit(s.x, s.y, s.z, 8, { color: wardrobe.equipped.trail, speed: 2, up: 0.5, size: 0.12, gravity: 0 }); }
   if (landImpact > 2) { cube.kickLand(landImpact); audio.land(landImpact); particles.emit(s.x, feetY, s.z, Math.min(12, 4 + Math.round(landImpact * 0.4)), { color: '#d8d0ff', speed: 2.4, up: 1.6, size: 0.12 }); }
   if (slamLanded) {
     audio.slamImpact(slamPower);
@@ -464,7 +565,7 @@ function frame(now: number) {
       particles.emit(s.x + Math.cos(a) * 1.2, feetY, s.z + Math.sin(a) * 1.2, 1, { color: '#9ff0ff', speed: 5, up: 3, size: 0.14 });
     }
   }
-  if (s.dashT > 0 && Math.random() < 0.6) particles.emit(s.x, s.y, s.z, 1, { color: '#6fe3ff', speed: 0.3, up: 0, size: 0.16, life: 0.3, gravity: 0 });
+  if (s.dashT > 0 && Math.random() < 0.6) particles.emit(s.x, s.y, s.z, 1, { color: wardrobe.equipped.trail, speed: 0.3, up: 0, size: 0.16, life: 0.3, gravity: 0 });
   const speed = Math.hypot(s.vx, s.vz);
   if (alive && s.grounded && speed > 2) {
     stepDist += speed * dt;
@@ -541,6 +642,13 @@ function frame(now: number) {
   cube.update(rawDt, pos, s.vy, s.grounded, s.groundY, faceX, faceZ, normal);
   cube.shadow.visible = true;
   particles.update(rawDt);
+  meteorRender.sync(meteors.meteors, time);
+  comboView.update(rawDt);
+  if (run?.running && ghostTrack && ghostAt(ghostTrack, run.elapsed, ghostPos)) {
+    ghost.setVisible(true);
+    ghost.setPosition(ghostPos.x, ghostPos.y, ghostPos.z, s.vx, s.vz);
+  } else ghost.setVisible(false);
+  ghost.update(time);
 
   // 등대: 별조각만큼 받침대가 빛나고, 다 모으면 빛기둥
   const n = save.shards.length;
