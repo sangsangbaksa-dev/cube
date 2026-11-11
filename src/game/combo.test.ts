@@ -272,12 +272,11 @@ describe('리스폰 (broken)', () => {
 describe('end 이벤트와 최고 기록', () => {
   it('coins는 점수/100 내림', () => {
     const c = new Combo(memory().storage);
-    for (let i = 0; i < 6; i++) c.handle(jump); // base 60, chain 6 -> 120
-    c.handle(dash); // base 85, chain 7 -> 배율 1.5 -> 127
-    expect(c.score).toBe(127);
+    for (let i = 0; i < 6; i++) c.handle(jump); // base 60, chain 6 -> 배율 2 -> 120
+    c.handle(dash); // base 85, chain 7 -> 배율 2 -> 170
+    expect(c.score).toBe(170);
     c.handle(landGround);
-    expect(c.handle(tick(0.9, true))).toMatchObject({ kind: 'end', chain: 7, score: 127, tier: '멋져요', coins: 1 });
-  });
+    expect(c.handle(tick(0.9, true))).toMatchObject({ kind: 'end', chain: 7, score: 170, tier: '멋져요', coins: 1 });  });
 
   it('더 높은 점수로 끝나면 newBest true 이고 저장', () => {
     const { storage, box } = memory();
