@@ -27,11 +27,14 @@ export function loadSave(): SaveData {
       const key = `route-${id}`, time = d.records?.[key];
       if (typeof time === 'number' && Number.isFinite(time) && time > 0) records[key] = time;
     }
+    // Never count duplicate/invalid collectibles or trust a victory flag without every story shard.
+    const shards = Array.isArray(d.shards) ? [...new Set(d.shards.filter((s) => typeof s === 'string' && /^route-[1-7]$/.test(s)))] : [];
+    const dust = Array.isArray(d.dust) ? [...new Set(d.dust.filter((n) => Number.isSafeInteger(n) && n >= 0))] : [];
     return {
-      shards: Array.isArray(d.shards) ? [...new Set(d.shards.filter((s) => typeof s === 'string' && /^route-[1-7]$/.test(s)))] : [],
-      dust: Array.isArray(d.dust) ? d.dust.filter((n) => Number.isInteger(n)) : [],
+      shards,
+      dust,
       checkpoint: d.checkpoint && Number.isFinite(d.checkpoint.x) && Number.isFinite(d.checkpoint.y) && Number.isFinite(d.checkpoint.z) ? d.checkpoint : null,
-      won: d.won === true,
+      won: d.won === true && shards.length === SHARD_GOAL,
       records,
     };
   } catch {
