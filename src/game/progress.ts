@@ -29,7 +29,9 @@ export function loadSave(): SaveData {
     }
     return {
       shards: Array.isArray(d.shards) ? [...new Set(d.shards.filter((s) => typeof s === 'string' && /^route-[1-7]$/.test(s)))] : [],
-      dust: Array.isArray(d.dust) ? d.dust.filter((n) => Number.isInteger(n)) : [],
+      // Each route creates three collectible dust pieces with IDs 0..(TOWER_COUNT*3-1).
+      // Damaged or duplicate entries must not inflate the progress HUD.
+      dust: Array.isArray(d.dust) ? [...new Set(d.dust.filter((n) => Number.isInteger(n) && n >= 0 && n < TOWER_COUNT * 3))] : [],
       checkpoint: d.checkpoint && Number.isFinite(d.checkpoint.x) && Number.isFinite(d.checkpoint.y) && Number.isFinite(d.checkpoint.z) ? d.checkpoint : null,
       won: d.won === true,
       records,
